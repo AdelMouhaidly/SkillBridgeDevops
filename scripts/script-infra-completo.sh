@@ -66,7 +66,18 @@ echo "========================================"
 SQL_SERVER_NAME="skillbridge-sql-$(openssl rand -hex 3)"
 SQL_DATABASE_NAME="SkillBridgeDb"
 SQL_ADMIN_USER="sqladmin"
-SQL_ADMIN_PASSWORD=$(openssl rand -base64 16 | tr -d "=+/" | cut -c1-16)
+# Gerar senha complexa que atende aos requisitos do Azure SQL
+# Requisitos: min 8 caracteres, 1 maiúscula, 1 minúscula, 1 número, 1 caractere especial
+# Gerar partes obrigatórias
+LOWER=$(openssl rand -base64 32 | tr -d "=+/" | grep -o '[a-z]' | head -c 1)
+UPPER=$(openssl rand -base64 32 | tr -d "=+/" | grep -o '[A-Z]' | head -c 1)
+NUMBER=$(openssl rand -base64 32 | tr -d "=+/" | grep -o '[0-9]' | head -c 1)
+SPECIAL=$(echo "!@#$%&*" | fold -w1 | shuf | head -c 1)
+# Gerar parte aleatória adicional
+RANDOM_PART=$(openssl rand -base64 32 | tr -d "=+/" | head -c 12)
+# Combinar e embaralhar
+SQL_ADMIN_PASSWORD="${LOWER}${UPPER}${NUMBER}${SPECIAL}${RANDOM_PART}"
+SQL_ADMIN_PASSWORD=$(echo "$SQL_ADMIN_PASSWORD" | fold -w1 | shuf | tr -d '\n')
 
 echo "SQL Server: $SQL_SERVER_NAME"
 echo "Database: $SQL_DATABASE_NAME"

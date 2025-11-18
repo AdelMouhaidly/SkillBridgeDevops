@@ -64,7 +64,27 @@ Write-Host "========================================" -ForegroundColor Cyan
 $SQL_SERVER_NAME = "skillbridge-sql-$(Get-Random -Minimum 1000 -Maximum 9999)"
 $SQL_DATABASE_NAME = "SkillBridgeDb"
 $SQL_ADMIN_USER = "sqladmin"
-$SQL_ADMIN_PASSWORD = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 16 | ForEach-Object {[char]$_})
+# Gerar senha complexa que atende aos requisitos do Azure SQL
+# Requisitos: min 8 caracteres, 1 maiúscula, 1 minúscula, 1 número, 1 caractere especial
+$lowercase = "abcdefghijklmnopqrstuvwxyz"
+$uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+$numbers = "0123456789"
+$special = "!@#$%&*"
+$allChars = $lowercase + $uppercase + $numbers + $special
+
+# Garantir pelo menos um de cada tipo
+$passwordParts = @(
+    (Get-Random -InputObject $lowercase.ToCharArray() -Count 1),
+    (Get-Random -InputObject $uppercase.ToCharArray() -Count 1),
+    (Get-Random -InputObject $numbers.ToCharArray() -Count 1),
+    (Get-Random -InputObject $special.ToCharArray() -Count 1)
+)
+
+# Adicionar mais caracteres aleatórios para completar 16 caracteres
+$passwordParts += Get-Random -InputObject $allChars.ToCharArray() -Count 12
+
+# Embaralhar os caracteres
+$SQL_ADMIN_PASSWORD = -join ($passwordParts | Sort-Object { Get-Random })
 
 Write-Host "SQL Server: $SQL_SERVER_NAME" -ForegroundColor White
 Write-Host "Database: $SQL_DATABASE_NAME" -ForegroundColor White
