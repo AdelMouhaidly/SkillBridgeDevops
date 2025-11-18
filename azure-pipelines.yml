@@ -74,13 +74,21 @@ stages:
               projects: '$(projectPath)'
               arguments: '--configuration $(buildConfiguration) --no-restore'
 
+          # Build do projeto de testes
+          - task: DotNetCoreCLI@2
+            displayName: 'Compilar projeto de testes'
+            inputs:
+              command: 'build'
+              projects: '$(testProjectPath)'
+              arguments: '--configuration $(buildConfiguration) --no-restore'
+
           # Executar testes
           - task: DotNetCoreCLI@2
             displayName: 'Executar testes unitários'
             inputs:
               command: 'test'
               projects: '$(testProjectPath)'
-              arguments: '--configuration $(buildConfiguration) --no-restore --collect:"XPlat Code Coverage" --logger trx --results-directory $(Agent.TempDirectory)/TestResults'
+              arguments: '--configuration $(buildConfiguration) --no-build --collect:"XPlat Code Coverage" --logger "trx;LogFileName=test-results.trx"'
               continueOnError: false
 
           # Publicar resultados dos testes
@@ -89,7 +97,7 @@ stages:
             condition: always()
             inputs:
               testResultsFormat: 'VSTest'
-              testResultsFiles: '$(Agent.TempDirectory)/TestResults/**/*.trx'
+              testResultsFiles: '$(Agent.TempDirectory)/**/*.trx'
               failTaskOnFailedTests: false
 
           # Publicar cobertura de código
@@ -98,7 +106,7 @@ stages:
             condition: always()
             inputs:
               codeCoverageTool: 'Cobertura'
-              summaryFileLocation: '$(Agent.TempDirectory)/TestResults/**/coverage.cobertura.xml'
+              summaryFileLocation: '$(Agent.TempDirectory)/**/coverage.cobertura.xml'
 
           # Publicar artefato
           - task: DotNetCoreCLI@2
@@ -106,7 +114,7 @@ stages:
             inputs:
               command: 'publish'
               projects: '$(projectPath)'
-              arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/publish --no-build'
+              arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/publish --no-restore'
               zipAfterPublish: false
 
           # Publicar artefato
@@ -154,11 +162,18 @@ stages:
                     projects: '$(projectPath)'
 
                 - task: DotNetCoreCLI@2
+                  displayName: 'Compilar projeto para migrations'
+                  inputs:
+                    command: 'build'
+                    projects: '$(projectPath)'
+                    arguments: '--configuration $(buildConfiguration) --no-restore'
+
+                - task: DotNetCoreCLI@2
                   displayName: 'Executar migrações do banco de dados'
                   inputs:
                     command: 'custom'
                     custom: 'ef'
-                    arguments: 'database update --project $(projectPath) --connection "$(DB_CONNECTION_STRING)"'
+                    arguments: 'database update --project $(projectPath) --connection "$(DB_CONNECTION_STRING)" --no-build'
                   continueOnError: false
                   env:
                     ConnectionStrings__DefaultConnection: '$(DB_CONNECTION_STRING)'
