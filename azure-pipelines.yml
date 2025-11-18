@@ -114,7 +114,7 @@ stages:
             inputs:
               command: 'publish'
               projects: '$(projectPath)'
-              arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/publish --no-restore'
+              arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/publish --no-build'
               zipAfterPublish: false
 
           # Publicar artefato
@@ -148,27 +148,21 @@ stages:
                 - download: current
                   artifact: drop
 
-                # Executar migrações do Entity Framework
+                # Instalar .NET SDK
                 - task: UseDotNet@2
                   displayName: 'Instalar .NET SDK 8.0'
                   inputs:
                     packageType: 'sdk'
                     version: '8.0.x'
 
+                # Restaurar dependências
                 - task: DotNetCoreCLI@2
                   displayName: 'Restaurar pacotes NuGet'
                   inputs:
                     command: 'restore'
                     projects: '$(projectPath)'
 
-                - task: Bash@3
-                  displayName: 'Instalar EF Core Tools'
-                  inputs:
-                    targetType: 'inline'
-                    script: |
-                      dotnet tool install --global dotnet-ef
-                      export PATH="$PATH:/home/vsts/.dotnet/tools"
-
+                # Compilar projeto
                 - task: DotNetCoreCLI@2
                   displayName: 'Compilar projeto para migrations'
                   inputs:
@@ -176,16 +170,33 @@ stages:
                     projects: '$(projectPath)'
                     arguments: '--configuration $(buildConfiguration) --no-restore'
 
+                # Instalar EF Core Tools e Executar Migrations
                 - task: Bash@3
-                  displayName: 'Executar migrações do banco de dados'
+                  displayName: 'Instalar EF Core Tools e Executar Migrations'
                   inputs:
                     targetType: 'inline'
                     script: |
+                      set -e
+                      
+                      # Instalar EF Core Tools (força reinstalação se já existir)
+                      dotnet tool install --global dotnet-ef --version 8.0.0 || dotnet tool update --global dotnet-ef --version 8.0.0
+                      
+                      # Adicionar ao PATH
                       export PATH="$PATH:/home/vsts/.dotnet/tools"
+                      
+                      # Verificar instalação
+                      echo "Verificando versão do dotnet-ef:"
+                      dotnet ef --version
+                      
+                      # Executar migrations
+                      echo "Executando migrations..."
                       dotnet ef database update \
                         --project $(projectPath) \
                         --connection "$(DB_CONNECTION_STRING)" \
-                        --no-build
+                        --no-build \
+                        --verbose
+                      
+                      echo "Migrations executadas com sucesso!"
                   env:
                     ConnectionStrings__DefaultConnection: '$(DB_CONNECTION_STRING)'
 
@@ -197,11 +208,14 @@ stages:
                     scriptType: 'bash'
                     scriptLocation: 'inlineScript'
                     inlineScript: |
+                      echo "Configurando variáveis de ambiente no App Service..."
                       az webapp config appsettings set \
                         --name $(WEB_APP_NAME) \
                         --resource-group $(RESOURCE_GROUP_NAME) \
                         --settings ASPNETCORE_ENVIRONMENT=Production \
-                        ConnectionStrings__DefaultConnection="$(DB_CONNECTION_STRING)"
+                        ConnectionStrings__DefaultConnection="$(DB_CONNECTION_STRING)" \
+                        --output none
+                      echo "Variáveis de ambiente configuradas com sucesso!"
 
                 # Deploy para Azure App Service
                 - task: AzureWebApp@1
@@ -212,19 +226,36 @@ stages:
                     package: '$(Pipeline.Workspace)/drop'
                     deploymentMethod: 'auto'
 
-                # Health check
+                # Health check com retry
                 - task: Bash@3
                   displayName: 'Verificar health check'
                   inputs:
                     targetType: 'inline'
                     script: |
                       url="$(WEB_APP_URL)/health"
-                      echo "Verificando: $url"
-                      response=$(curl -s -o /dev/null -w "%{http_code}" "$url")
-                      echo "Status: $response"
-                      if [ "$response" -ne 200 ]; then
-                        echo "Health check falhou!"
-                        exit 1
-                      fi
-                      echo "Health check passou!"
-
+                      echo "Verificando health check: $url"
+                      
+                      max_attempts=10
+                      attempt=1
+                      wait_time=10
+                      
+                      while [ $attempt -le $max_attempts ]; do
+                        echo "Tentativa $attempt/$max_attempts..."
+                        response=$(curl -s -o /dev/null -w "%{http_code}" "$url" || echo "000")
+                        echo "Status HTTP: $response"
+                        
+                        if [ "$response" -eq 200 ]; then
+                          echo "✅ Health check passou!"
+                          exit 0
+                        fi
+                        
+                        if [ $attempt -lt $max_attempts ]; then
+                          echo "Aguardando $wait_time segundos antes da próxima tentativa..."
+                          sleep $wait_time
+                        fi
+                        
+                        attempt=$((attempt + 1))
+                      done
+                      
+                      echo "❌ Health check falhou após $max_attempts tentativas"
+                      exit 1
