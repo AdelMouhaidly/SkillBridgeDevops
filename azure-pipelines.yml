@@ -1,0 +1,194 @@
+# Azure Pipelines YAML para Build e Release
+# Build: Compila, testa e publica artefatos
+# Release: Faz deploy automático no Azure App Service
+
+trigger:
+  branches:
+    include:
+      - main
+      - master
+  paths:
+    exclude:
+      - README.md
+      - '*.md'
+
+pr:
+  branches:
+    include:
+      - main
+      - master
+
+variables:
+  - group: skillbridge-variables
+  - name: buildConfiguration
+    value: 'Release'
+  - name: projectPath
+    value: 'SkillBridge.API/SkillBridge.API.csproj'
+  - name: testProjectPath
+    value: 'SkillBridge.Tests/SkillBridge.Tests.csproj'
+  - name: DB_CONNECTION_STRING
+    value: 'Server=$(DB_SERVER);Database=SkillBridgeDb;User Id=$(DB_USER);Password=$(DB_PASSWORD);Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=true'
+  - name: RESOURCE_GROUP_NAME
+    value: 'rg-skillbridge-devops'
+
+stages:
+  # Stage 1: Build
+  - stage: Build
+    displayName: 'Build e Testes'
+    jobs:
+      - job: BuildJob
+        displayName: 'Compilar e Testar'
+        pool:
+          vmImage: 'ubuntu-latest'
+        
+        steps:
+          # Checkout do código
+          - checkout: self
+            fetchDepth: 0
+
+          # Configurar .NET SDK
+          - task: UseDotNet@2
+            displayName: 'Instalar .NET SDK 8.0'
+            inputs:
+              packageType: 'sdk'
+              version: '8.0.x'
+
+          # Restaurar dependências
+          - task: DotNetCoreCLI@2
+            displayName: 'Restaurar pacotes NuGet'
+            inputs:
+              command: 'restore'
+              projects: '$(projectPath)'
+
+          - task: DotNetCoreCLI@2
+            displayName: 'Restaurar pacotes de testes'
+            inputs:
+              command: 'restore'
+              projects: '$(testProjectPath)'
+
+          # Build do projeto
+          - task: DotNetCoreCLI@2
+            displayName: 'Compilar projeto'
+            inputs:
+              command: 'build'
+              projects: '$(projectPath)'
+              arguments: '--configuration $(buildConfiguration) --no-restore'
+
+          # Executar testes
+          - task: DotNetCoreCLI@2
+            displayName: 'Executar testes unitários'
+            inputs:
+              command: 'test'
+              projects: '$(testProjectPath)'
+              arguments: '--configuration $(buildConfiguration) --no-build --collect:"XPlat Code Coverage" --logger trx --results-directory $(Agent.TempDirectory)/TestResults'
+              continueOnError: false
+
+          # Publicar resultados dos testes
+          - task: PublishTestResults@2
+            displayName: 'Publicar resultados dos testes'
+            condition: always()
+            inputs:
+              testResultsFormat: 'VSTest'
+              testResultsFiles: '$(Agent.TempDirectory)/TestResults/**/*.trx'
+              failTaskOnFailedTests: false
+
+          # Publicar cobertura de código
+          - task: PublishCodeCoverageResults@1
+            displayName: 'Publicar cobertura de código'
+            condition: always()
+            inputs:
+              codeCoverageTool: 'Cobertura'
+              summaryFileLocation: '$(Agent.TempDirectory)/TestResults/**/coverage.cobertura.xml'
+
+          # Publicar artefato
+          - task: DotNetCoreCLI@2
+            displayName: 'Publicar artefato para deploy'
+            inputs:
+              command: 'publish'
+              projects: '$(projectPath)'
+              arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/publish --no-build'
+              zipAfterPublish: false
+
+          # Publicar artefato
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publicar artefatos'
+            inputs:
+              pathToPublish: '$(Build.ArtifactStagingDirectory)/publish'
+              artifactName: 'drop'
+              publishLocation: 'Container'
+
+  # Stage 2: Release (Deploy)
+  - stage: Deploy
+    displayName: 'Deploy para Azure'
+    dependsOn: Build
+    condition: succeeded()
+    jobs:
+      - deployment: DeployJob
+        displayName: 'Deploy para Azure App Service'
+        pool:
+          vmImage: 'ubuntu-latest'
+        environment: 'production'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                # Download do artefato
+                - download: current
+                  artifact: drop
+
+                # Executar migrações do Entity Framework
+                - task: UseDotNet@2
+                  displayName: 'Instalar .NET SDK 8.0'
+                  inputs:
+                    packageType: 'sdk'
+                    version: '8.0.x'
+
+                - task: DotNetCoreCLI@2
+                  displayName: 'Executar migrações do banco de dados'
+                  inputs:
+                    command: 'custom'
+                    custom: 'ef'
+                    arguments: 'database update --project $(projectPath) --connection "$(DB_CONNECTION_STRING)" --no-build'
+                  continueOnError: false
+                  env:
+                    ConnectionStrings__DefaultConnection: '$(DB_CONNECTION_STRING)'
+
+                # Configurar variáveis de ambiente via Azure CLI
+                - task: AzureCLI@2
+                  displayName: 'Configurar variáveis de ambiente'
+                  inputs:
+                    azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      az webapp config appsettings set \
+                        --name $(WEB_APP_NAME) \
+                        --resource-group $(RESOURCE_GROUP_NAME) \
+                        --settings ASPNETCORE_ENVIRONMENT=Production \
+                        ConnectionStrings__DefaultConnection="$(DB_CONNECTION_STRING)"
+
+                # Deploy para Azure App Service
+                - task: AzureWebApp@1
+                  displayName: 'Deploy para Azure App Service'
+                  inputs:
+                    azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
+                    appName: '$(WEB_APP_NAME)'
+                    package: '$(Pipeline.Workspace)/drop'
+                    deploymentMethod: 'auto'
+
+                # Health check
+                - task: Bash@3
+                  displayName: 'Verificar health check'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      url="$(WEB_APP_URL)/health"
+                      echo "Verificando: $url"
+                      response=$(curl -s -o /dev/null -w "%{http_code}" "$url")
+                      echo "Status: $response"
+                      if [ "$response" -ne 200 ]; then
+                        echo "Health check falhou!"
+                        exit 1
+                      fi
+                      echo "Health check passou!"
+

@@ -1,0 +1,125 @@
+{
+  "usuarios": {
+    "create": {
+      "method": "POST",
+      "url": "/api/v1/usuarios",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "nome": "João Silva",
+        "email": "joao.silva@email.com",
+        "competencias": "C#, .NET, SQL Server, Azure, Entity Framework"
+      }
+    },
+    "read_all": {
+      "method": "GET",
+      "url": "/api/v1/usuarios?pageNumber=1&pageSize=10&orderBy=Nome&sortDirection=asc"
+    },
+    "read_by_id": {
+      "method": "GET",
+      "url": "/api/v1/usuarios/{id}"
+    },
+    "update": {
+      "method": "PUT",
+      "url": "/api/v1/usuarios/{id}",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "nome": "João Silva Santos",
+        "email": "joao.silva@email.com",
+        "competencias": "C#, .NET, SQL Server, Azure, Entity Framework, Docker"
+      }
+    },
+    "delete": {
+      "method": "DELETE",
+      "url": "/api/v1/usuarios/{id}"
+    }
+  },
+  "vagas": {
+    "create": {
+      "method": "POST",
+      "url": "/api/v1/vagas",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "titulo": "Desenvolvedor .NET Senior",
+        "empresa": "TechCorp",
+        "requisitos": "C#, .NET 8, Azure, SQL Server, Entity Framework, Docker",
+        "salario": 12000.0,
+        "tipoContrato": "CLT"
+      }
+    },
+    "read_all": {
+      "method": "GET",
+      "url": "/api/v1/vagas?pageNumber=1&pageSize=10&orderBy=Titulo&sortDirection=asc"
+    },
+    "read_by_id": {
+      "method": "GET",
+      "url": "/api/v1/vagas/{id}"
+    },
+    "update": {
+      "method": "PUT",
+      "url": "/api/v1/vagas/{id}",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "titulo": "Desenvolvedor .NET Senior",
+        "empresa": "TechCorp Solutions",
+        "requisitos": "C#, .NET 8, Azure, SQL Server, Entity Framework, Docker, Kubernetes",
+        "salario": 15000.0,
+        "tipoContrato": "CLT"
+      }
+    },
+    "delete": {
+      "method": "DELETE",
+      "url": "/api/v1/vagas/{id}"
+    }
+  },
+  "aplicacoes": {
+    "create": {
+      "method": "POST",
+      "url": "/api/v1/aplicacoes",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "usuarioId": "550e8400-e29b-41d4-a716-446655440000",
+        "vagaId": "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+      }
+    },
+    "read_all": {
+      "method": "GET",
+      "url": "/api/v1/aplicacoes?pageNumber=1&pageSize=10&orderBy=DataAplicacao&sortDirection=desc"
+    },
+    "read_by_id": {
+      "method": "GET",
+      "url": "/api/v1/aplicacoes/{id}"
+    },
+    "read_by_usuario": {
+      "method": "GET",
+      "url": "/api/v1/aplicacoes/usuario/{usuarioId}"
+    },
+    "read_by_vaga": {
+      "method": "GET",
+      "url": "/api/v1/aplicacoes/vaga/{vagaId}"
+    },
+    "update": {
+      "method": "PUT",
+      "url": "/api/v1/aplicacoes/{id}",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "pontuacaoCompatibilidade": 85.5
+      }
+    },
+    "delete": {
+      "method": "DELETE",
+      "url": "/api/v1/aplicacoes/{id}"
+    }
+  }
+}
