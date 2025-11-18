@@ -161,6 +161,14 @@ stages:
                     command: 'restore'
                     projects: '$(projectPath)'
 
+                - task: Bash@3
+                  displayName: 'Instalar EF Core Tools'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      dotnet tool install --global dotnet-ef
+                      export PATH="$PATH:/home/vsts/.dotnet/tools"
+
                 - task: DotNetCoreCLI@2
                   displayName: 'Compilar projeto para migrations'
                   inputs:
@@ -168,13 +176,16 @@ stages:
                     projects: '$(projectPath)'
                     arguments: '--configuration $(buildConfiguration) --no-restore'
 
-                - task: DotNetCoreCLI@2
+                - task: Bash@3
                   displayName: 'Executar migrações do banco de dados'
                   inputs:
-                    command: 'custom'
-                    custom: 'ef'
-                    arguments: 'database update --project $(projectPath) --connection "$(DB_CONNECTION_STRING)" --no-build'
-                  continueOnError: false
+                    targetType: 'inline'
+                    script: |
+                      export PATH="$PATH:/home/vsts/.dotnet/tools"
+                      dotnet ef database update \
+                        --project $(projectPath) \
+                        --connection "$(DB_CONNECTION_STRING)" \
+                        --no-build
                   env:
                     ConnectionStrings__DefaultConnection: '$(DB_CONNECTION_STRING)'
 
