@@ -27,7 +27,7 @@ variables:
   - name: testProjectPath
     value: 'SkillBridge.Tests/SkillBridge.Tests.csproj'
   - name: DB_CONNECTION_STRING
-    value: 'Server=$(DB_SERVER);Database=SkillBridgeDb;User Id=$(DB_USER);Password=$(DB_PASSWORD);Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=true'
+    value: 'Host=$(DB_SERVER);Database=$(DB_NAME);Username=$(DB_USER);Password=$(DB_PASSWORD);SSL Mode=Require;Trust Server Certificate=true'
   - name: RESOURCE_GROUP_NAME
     value: 'rg-skillbridge-devops'
 
@@ -132,6 +132,10 @@ stages:
           runOnce:
             deploy:
               steps:
+                # Checkout do código para executar migrações
+                - checkout: self
+                  fetchDepth: 0
+
                 # Download do artefato
                 - download: current
                   artifact: drop
@@ -144,11 +148,17 @@ stages:
                     version: '8.0.x'
 
                 - task: DotNetCoreCLI@2
+                  displayName: 'Restaurar pacotes NuGet'
+                  inputs:
+                    command: 'restore'
+                    projects: '$(projectPath)'
+
+                - task: DotNetCoreCLI@2
                   displayName: 'Executar migrações do banco de dados'
                   inputs:
                     command: 'custom'
                     custom: 'ef'
-                    arguments: 'database update --project $(projectPath) --connection "$(DB_CONNECTION_STRING)" --no-build'
+                    arguments: 'database update --project $(projectPath) --connection "$(DB_CONNECTION_STRING)"'
                   continueOnError: false
                   env:
                     ConnectionStrings__DefaultConnection: '$(DB_CONNECTION_STRING)'

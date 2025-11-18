@@ -15,29 +15,18 @@ A solução utiliza uma arquitetura em camadas com os seguintes componentes:
                        │ Entity Framework Core
                        │
 ┌──────────────────────▼──────────────────────────────────────┐
-│                  Azure SQL Database                          │
+│            Azure Database for PostgreSQL                     │
 │              (SkillBridgeDb - PaaS)                          │
 └─────────────────────────────────────────────────────────────┘
-
-Fluxo de CI/CD:
-┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
-│  Azure   │───▶│  Azure   │───▶│  Azure   │───▶│  Azure   │
-│  Repos   │    │  Boards  │    │ Pipeline │    │   App    │
-│          │    │          │    │  Build   │    │ Service  │
-└──────────┘    └──────────┘    └────┬─────┘    └──────────┘
-                                     │
-                                     ▼
-                              ┌──────────┐
-                              │  Azure   │
-                              │ Pipeline │
-                              │ Release  │
-                              └──────────┘
 ```
+
+**Scripts:** `script-infra-completo.ps1` / `script-infra-completo.sh`  
+**Pipeline:** `azure-pipelines.yml`
 
 ### Componentes Principais
 
 - **Frontend/API**: ASP.NET Core Web API (.NET 8.0)
-- **Banco de Dados**: Azure SQL Database (PaaS)
+- **Banco de Dados**: Azure Database for PostgreSQL (PaaS)
 - **CI/CD**: Azure Pipelines (Build + Release)
 - **Versionamento**: Azure Repos (Git)
 - **Gerenciamento**: Azure Boards

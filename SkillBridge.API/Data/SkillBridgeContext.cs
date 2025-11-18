@@ -21,7 +21,7 @@ public class SkillBridgeContext : DbContext
         {
             entity.HasIndex(u => u.Email).IsUnique();
             entity.Property(u => u.DataCadastro)
-                  .HasDefaultValueSql("GETUTCDATE()");
+                  .HasDefaultValueSql("CURRENT_TIMESTAMP");
         });
 
         modelBuilder.Entity<Vaga>(entity =>
@@ -34,7 +34,7 @@ public class SkillBridgeContext : DbContext
         {
             entity.HasIndex(a => new { a.UsuarioId, a.VagaId }).IsUnique();
             entity.Property(a => a.DataAplicacao)
-                  .HasDefaultValueSql("GETUTCDATE()");
+                  .HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(a => a.PontuacaoCompatibilidade)
                   .HasDefaultValue(0);
 

@@ -18,7 +18,7 @@ public class SkillBridgeContextFactory : IDesignTimeDbContextFactory<SkillBridge
                                ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
         var optionsBuilder = new DbContextOptionsBuilder<SkillBridgeContext>();
-        optionsBuilder.UseSqlServer(connectionString);
+        optionsBuilder.UseNpgsql(connectionString);
 
         return new SkillBridgeContext(optionsBuilder.Options);
     }

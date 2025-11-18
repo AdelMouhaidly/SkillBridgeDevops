@@ -15,11 +15,11 @@ namespace SkillBridge.API.Migrations
                 name: "Usuarios",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    Nome = table.Column<string>(type: "nvarchar(120)", maxLength: 120, nullable: false),
-                    Email = table.Column<string>(type: "nvarchar(180)", maxLength: 180, nullable: false),
-                    Competencias = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    DataCadastro = table.Column<DateTime>(type: "datetime2", nullable: false, defaultValueSql: "GETUTCDATE()")
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Nome = table.Column<string>(type: "character varying(120)", maxLength: 120, nullable: false),
+                    Email = table.Column<string>(type: "character varying(180)", maxLength: 180, nullable: false),
+                    Competencias = table.Column<string>(type: "text", nullable: false),
+                    DataCadastro = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP")
                 },
                 constraints: table =>
                 {
@@ -30,12 +30,12 @@ namespace SkillBridge.API.Migrations
                 name: "Vagas",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    Titulo = table.Column<string>(type: "nvarchar(180)", maxLength: 180, nullable: false),
-                    Empresa = table.Column<string>(type: "nvarchar(180)", maxLength: 180, nullable: false),
-                    Requisitos = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Salario = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
-                    TipoContrato = table.Column<string>(type: "nvarchar(80)", maxLength: 80, nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Titulo = table.Column<string>(type: "character varying(180)", maxLength: 180, nullable: false),
+                    Empresa = table.Column<string>(type: "character varying(180)", maxLength: 180, nullable: false),
+                    Requisitos = table.Column<string>(type: "text", nullable: false),
+                    Salario = table.Column<decimal>(type: "numeric(18,2)", nullable: false),
+                    TipoContrato = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -46,11 +46,11 @@ namespace SkillBridge.API.Migrations
                 name: "Aplicacoes",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    UsuarioId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    VagaId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    DataAplicacao = table.Column<DateTime>(type: "datetime2", nullable: false, defaultValueSql: "GETUTCDATE()"),
-                    PontuacaoCompatibilidade = table.Column<double>(type: "float", nullable: false, defaultValue: 0.0)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    UsuarioId = table.Column<Guid>(type: "uuid", nullable: false),
+                    VagaId = table.Column<Guid>(type: "uuid", nullable: false),
+                    DataAplicacao = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
+                    PontuacaoCompatibilidade = table.Column<double>(type: "double precision", nullable: false, defaultValue: 0.0)
                 },
                 constraints: table =>
                 {

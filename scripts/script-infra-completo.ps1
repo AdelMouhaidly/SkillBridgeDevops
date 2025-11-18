@@ -1,15 +1,5 @@
-# Script Azure CLI completo para criar toda a infraestrutura do SkillBridge (PowerShell)
-# Uso: .\script-infra-completo.ps1
-# 
-# Este script cria:
-# 1. Resource Group
-# 2. Azure SQL Server e Database
-# 3. App Service Plan e Web App
-#
-# Pré-requisitos:
-# - Azure CLI instalado
-# - Login no Azure (az login)
-# - Permissões para criar recursos na subscription
+# Script Azure CLI completo para criar toda a infraestrutura do SkillBridge (PostgreSQL PaaS)
+# Uso: .\scripts\script-infra-completo.ps1
 
 param(
     [string]$ResourceGroupName = "rg-skillbridge-devops",
@@ -18,6 +8,7 @@ param(
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  SkillBridge - Provisionamento Azure  " -ForegroundColor Cyan
+Write-Host "  (PostgreSQL PaaS)                    " -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -55,17 +46,16 @@ Write-Host "Resource Group criado com sucesso!" -ForegroundColor Green
 Write-Host ""
 
 # ============================================
-# 2. CRIAR AZURE SQL SERVER E DATABASE
+# 2. CRIAR AZURE DATABASE FOR POSTGRESQL
 # ============================================
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "2. Criando Azure SQL Server e Database..." -ForegroundColor Cyan
+Write-Host "2. Criando Azure Database for PostgreSQL..." -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
-$SQL_SERVER_NAME = "skillbridge-sql-$(Get-Random -Minimum 1000 -Maximum 9999)"
-$SQL_DATABASE_NAME = "SkillBridgeDb"
-$SQL_ADMIN_USER = "sqladmin"
-# Gerar senha complexa que atende aos requisitos do Azure SQL
-# Requisitos: min 8 caracteres, 1 maiúscula, 1 minúscula, 1 número, 1 caractere especial
+$POSTGRES_SERVER_NAME = "skillbridge-postgres-$(Get-Random -Minimum 1000 -Maximum 9999)"
+$POSTGRES_DATABASE_NAME = "skillbridgedb"
+$POSTGRES_ADMIN_USER = "skillbridgeadmin"
+# Gerar senha complexa que atende aos requisitos do PostgreSQL
 $lowercase = "abcdefghijklmnopqrstuvwxyz"
 $uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 $numbers = "0123456789"
@@ -84,51 +74,55 @@ $passwordParts = @(
 $passwordParts += Get-Random -InputObject $allChars.ToCharArray() -Count 12
 
 # Embaralhar os caracteres
-$SQL_ADMIN_PASSWORD = -join ($passwordParts | Sort-Object { Get-Random })
+$POSTGRES_ADMIN_PASSWORD = -join ($passwordParts | Sort-Object { Get-Random })
 
-Write-Host "SQL Server: $SQL_SERVER_NAME" -ForegroundColor White
-Write-Host "Database: $SQL_DATABASE_NAME" -ForegroundColor White
-Write-Host "Admin User: $SQL_ADMIN_USER" -ForegroundColor White
+Write-Host "PostgreSQL Server: $POSTGRES_SERVER_NAME" -ForegroundColor White
+Write-Host "Database: $POSTGRES_DATABASE_NAME" -ForegroundColor White
+Write-Host "Admin User: $POSTGRES_ADMIN_USER" -ForegroundColor White
 Write-Host ""
 
-# Criar SQL Server
-Write-Host "Criando SQL Server..." -ForegroundColor Yellow
-az sql server create `
+# Criar PostgreSQL Server (Flexible Server)
+Write-Host "Criando PostgreSQL Server..." -ForegroundColor Yellow
+az postgres flexible-server create `
   --resource-group $ResourceGroupName `
-  --name $SQL_SERVER_NAME `
+  --name $POSTGRES_SERVER_NAME `
   --location $Location `
-  --admin-user $SQL_ADMIN_USER `
-  --admin-password $SQL_ADMIN_PASSWORD
+  --admin-user $POSTGRES_ADMIN_USER `
+  --admin-password $POSTGRES_ADMIN_PASSWORD `
+  --sku-name Standard_B1ms `
+  --tier Burstable `
+  --version 16 `
+  --storage-size 32 `
+  --public-access 0.0.0.0 `
+  --high-availability Disabled
 
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "Erro ao criar SQL Server" -ForegroundColor Red
+    Write-Host "Erro ao criar PostgreSQL Server" -ForegroundColor Red
     exit 1
 }
 
-# Configurar firewall para permitir serviços Azure
+# Criar firewall rule para permitir serviços Azure
 Write-Host "Configurando firewall para permitir serviços Azure..." -ForegroundColor Yellow
-az sql server firewall-rule create `
+az postgres flexible-server firewall-rule create `
   --resource-group $ResourceGroupName `
-  --server $SQL_SERVER_NAME `
-  --name AllowAzureServices `
+  --name $POSTGRES_SERVER_NAME `
+  --rule-name AllowAzureServices `
   --start-ip-address 0.0.0.0 `
   --end-ip-address 0.0.0.0
 
 # Criar banco de dados
 Write-Host "Criando banco de dados..." -ForegroundColor Yellow
-az sql db create `
+az postgres flexible-server db create `
   --resource-group $ResourceGroupName `
-  --server $SQL_SERVER_NAME `
-  --name $SQL_DATABASE_NAME `
-  --service-objective Basic `
-  --backup-storage-redundancy Local
+  --server-name $POSTGRES_SERVER_NAME `
+  --database-name $POSTGRES_DATABASE_NAME
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Erro ao criar banco de dados" -ForegroundColor Red
     exit 1
 }
 
-Write-Host "Azure SQL criado com sucesso!" -ForegroundColor Green
+Write-Host "PostgreSQL criado com sucesso!" -ForegroundColor Green
 Write-Host ""
 
 # ============================================
@@ -188,11 +182,11 @@ Write-Host "RESOURCE GROUP:" -ForegroundColor Cyan
 Write-Host "  Nome: $ResourceGroupName" -ForegroundColor White
 Write-Host "  Região: $Location" -ForegroundColor White
 Write-Host ""
-Write-Host "AZURE SQL DATABASE:" -ForegroundColor Cyan
-Write-Host "  Server: $SQL_SERVER_NAME.database.windows.net" -ForegroundColor White
-Write-Host "  Database: $SQL_DATABASE_NAME" -ForegroundColor White
-Write-Host "  Admin User: $SQL_ADMIN_USER" -ForegroundColor White
-Write-Host "  Admin Password: $SQL_ADMIN_PASSWORD" -ForegroundColor Yellow
+Write-Host "AZURE DATABASE FOR POSTGRESQL:" -ForegroundColor Cyan
+Write-Host "  Server: $POSTGRES_SERVER_NAME.postgres.database.azure.com" -ForegroundColor White
+Write-Host "  Database: $POSTGRES_DATABASE_NAME" -ForegroundColor White
+Write-Host "  Admin User: $POSTGRES_ADMIN_USER" -ForegroundColor White
+Write-Host "  Admin Password: $POSTGRES_ADMIN_PASSWORD" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "WEB APP:" -ForegroundColor Cyan
 Write-Host "  Nome: $WEB_APP_NAME" -ForegroundColor White
@@ -203,23 +197,24 @@ Write-Host "========================================" -ForegroundColor Yellow
 Write-Host "  PRÓXIMOS PASSOS:" -ForegroundColor Yellow
 Write-Host "========================================" -ForegroundColor Yellow
 Write-Host ""
-Write-Host "1. Salve as credenciais do SQL Server em variáveis seguras do Azure DevOps:" -ForegroundColor White
-Write-Host "   - DB_SERVER: $SQL_SERVER_NAME.database.windows.net" -ForegroundColor Gray
-Write-Host "   - DB_USER: $SQL_ADMIN_USER" -ForegroundColor Gray
-Write-Host "   - DB_PASSWORD: $SQL_ADMIN_PASSWORD" -ForegroundColor Gray
+Write-Host "1. Salve as credenciais do PostgreSQL em variáveis seguras do Azure DevOps:" -ForegroundColor White
+Write-Host "   - DB_SERVER: $POSTGRES_SERVER_NAME.postgres.database.azure.com" -ForegroundColor Gray
+Write-Host "   - DB_USER: $POSTGRES_ADMIN_USER" -ForegroundColor Gray
+Write-Host "   - DB_PASSWORD: $POSTGRES_ADMIN_PASSWORD (marque como secret)" -ForegroundColor Gray
+Write-Host "   - DB_NAME: $POSTGRES_DATABASE_NAME" -ForegroundColor Gray
 Write-Host ""
 Write-Host "2. Configure as variáveis no Azure DevOps Variable Group 'skillbridge-variables':" -ForegroundColor White
 Write-Host "   - DB_SERVER" -ForegroundColor Gray
 Write-Host "   - DB_USER" -ForegroundColor Gray
 Write-Host "   - DB_PASSWORD (marque como secret)" -ForegroundColor Gray
+Write-Host "   - DB_NAME" -ForegroundColor Gray
 Write-Host "   - WEB_APP_NAME: $WEB_APP_NAME" -ForegroundColor Gray
 Write-Host "   - WEB_APP_URL: https://$WEB_APP_NAME.azurewebsites.net" -ForegroundColor Gray
 Write-Host ""
 Write-Host "3. Execute o script SQL no banco de dados:" -ForegroundColor White
 Write-Host "   scripts/script-bd.sql" -ForegroundColor Gray
+Write-Host "   Use o Query Editor no Azure Portal" -ForegroundColor Gray
 Write-Host ""
-Write-Host "4. Configure a connection string no App Service:" -ForegroundColor White
-Write-Host "   ConnectionStrings__DefaultConnection" -ForegroundColor Gray
+Write-Host "4. Configure a connection string no App Service via Pipeline" -ForegroundColor White
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-
