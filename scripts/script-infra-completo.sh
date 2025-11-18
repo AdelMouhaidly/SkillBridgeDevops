@@ -133,7 +133,7 @@ echo "========================================"
 
 APP_SERVICE_PLAN_NAME="asp-skillbridge-devops"
 WEB_APP_NAME="skillbridge-api-$(openssl rand -hex 3)"
-RUNTIME="DOTNET:8.0"
+RUNTIME="DOTNETCORE:8.0"
 
 echo "App Service Plan: $APP_SERVICE_PLAN_NAME"
 echo "Web App: $WEB_APP_NAME"

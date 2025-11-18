@@ -140,7 +140,7 @@ Write-Host "========================================" -ForegroundColor Cyan
 
 $APP_SERVICE_PLAN_NAME = "asp-skillbridge-devops"
 $WEB_APP_NAME = "skillbridge-api-$(Get-Random -Minimum 1000 -Maximum 9999)"
-$RUNTIME = "DOTNET:8.0"
+$RUNTIME = "DOTNETCORE:8.0"
 
 Write-Host "App Service Plan: $APP_SERVICE_PLAN_NAME" -ForegroundColor White
 Write-Host "Web App: $WEB_APP_NAME" -ForegroundColor White
