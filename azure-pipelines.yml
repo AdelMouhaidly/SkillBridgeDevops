@@ -253,6 +253,7 @@ stages:
                     appName: '$(WEB_APP_NAME)'
                     package: '$(Pipeline.Workspace)/drop'
                     deploymentMethod: 'auto'
+                    startUpCommand: 'dotnet SkillBridge.API.dll'
 
                 # Health check com retry
                 - task: Bash@3
