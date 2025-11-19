@@ -10,7 +10,7 @@ trigger:
   paths:
     exclude:
       - README.md
-      - '*.md'
+      - "*.md"
 
 pr:
   branches:
@@ -21,26 +21,26 @@ pr:
 variables:
   - group: skillbridge-variables
   - name: buildConfiguration
-    value: 'Release'
+    value: "Release"
   - name: projectPath
-    value: 'SkillBridge.API/SkillBridge.API.csproj'
+    value: "SkillBridge.API/SkillBridge.API.csproj"
   - name: testProjectPath
-    value: 'SkillBridge.Tests/SkillBridge.Tests.csproj'
+    value: "SkillBridge.Tests/SkillBridge.Tests.csproj"
   - name: DB_CONNECTION_STRING
-    value: 'Host=$(DB_SERVER);Database=$(DB_NAME);Username=$(DB_USER);Password=$(DB_PASSWORD);SSL Mode=Require;Trust Server Certificate=true'
+    value: "Host=$(DB_SERVER);Database=$(DB_NAME);Username=$(DB_USER);Password=$(DB_PASSWORD);SSL Mode=Require;Trust Server Certificate=true"
   - name: RESOURCE_GROUP_NAME
-    value: 'rg-skillbridge-devops'
+    value: "rg-skillbridge-devops"
 
 stages:
   # Stage 1: Build
   - stage: Build
-    displayName: 'Build e Testes'
+    displayName: "Build e Testes"
     jobs:
       - job: BuildJob
-        displayName: 'Compilar e Testar'
+        displayName: "Compilar e Testar"
         pool:
-          vmImage: 'ubuntu-latest'
-        
+          vmImage: "ubuntu-latest"
+
         steps:
           # Checkout do código
           - checkout: self
@@ -48,122 +48,140 @@ stages:
 
           # Configurar .NET SDK
           - task: UseDotNet@2
-            displayName: 'Instalar .NET SDK 8.0'
+            displayName: "Instalar .NET SDK 8.0"
             inputs:
-              packageType: 'sdk'
-              version: '8.0.x'
+              packageType: "sdk"
+              version: "8.0.x"
 
           # Restaurar dependências
           - task: DotNetCoreCLI@2
-            displayName: 'Restaurar pacotes NuGet'
+            displayName: "Restaurar pacotes NuGet"
             inputs:
-              command: 'restore'
-              projects: '$(projectPath)'
+              command: "restore"
+              projects: "$(projectPath)"
 
           - task: DotNetCoreCLI@2
-            displayName: 'Restaurar pacotes de testes'
+            displayName: "Restaurar pacotes de testes"
             inputs:
-              command: 'restore'
-              projects: '$(testProjectPath)'
+              command: "restore"
+              projects: "$(testProjectPath)"
 
           # Build do projeto
           - task: DotNetCoreCLI@2
-            displayName: 'Compilar projeto'
+            displayName: "Compilar projeto"
             inputs:
-              command: 'build'
-              projects: '$(projectPath)'
-              arguments: '--configuration $(buildConfiguration) --no-restore'
+              command: "build"
+              projects: "$(projectPath)"
+              arguments: "--configuration $(buildConfiguration) --no-restore"
 
           # Build do projeto de testes
           - task: DotNetCoreCLI@2
-            displayName: 'Compilar projeto de testes'
+            displayName: "Compilar projeto de testes"
             inputs:
-              command: 'build'
-              projects: '$(testProjectPath)'
-              arguments: '--configuration $(buildConfiguration) --no-restore'
+              command: "build"
+              projects: "$(testProjectPath)"
+              arguments: "--configuration $(buildConfiguration) --no-restore"
 
           # Executar testes
           - task: DotNetCoreCLI@2
-            displayName: 'Executar testes unitários'
+            displayName: "Executar testes unitários"
             inputs:
-              command: 'test'
-              projects: '$(testProjectPath)'
+              command: "test"
+              projects: "$(testProjectPath)"
               arguments: '--configuration $(buildConfiguration) --no-build --collect:"XPlat Code Coverage" --logger "trx;LogFileName=test-results.trx"'
               continueOnError: false
 
           # Publicar resultados dos testes
           - task: PublishTestResults@2
-            displayName: 'Publicar resultados dos testes'
+            displayName: "Publicar resultados dos testes"
             condition: always()
             inputs:
-              testResultsFormat: 'VSTest'
-              testResultsFiles: '$(Agent.TempDirectory)/**/*.trx'
+              testResultsFormat: "VSTest"
+              testResultsFiles: "$(Agent.TempDirectory)/**/*.trx"
               failTaskOnFailedTests: false
 
           # Publicar cobertura de código
           - task: PublishCodeCoverageResults@1
-            displayName: 'Publicar cobertura de código'
+            displayName: "Publicar cobertura de código"
             condition: always()
             inputs:
-              codeCoverageTool: 'Cobertura'
-              summaryFileLocation: '$(Agent.TempDirectory)/**/coverage.cobertura.xml'
+              codeCoverageTool: "Cobertura"
+              summaryFileLocation: "$(Agent.TempDirectory)/**/coverage.cobertura.xml"
 
-          # Publicar artefato (framework-dependent)
+          # Publicar artefato com runtime específico
           - task: DotNetCoreCLI@2
-            displayName: 'Publicar artefato para deploy'
+            displayName: "Publicar artefato para deploy"
             inputs:
-              command: 'publish'
-              projects: '$(projectPath)'
-              arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/publish --no-restore --self-contained false'
+              command: "publish"
+              projects: "$(projectPath)"
+              arguments: "--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/publish --no-restore --self-contained false --runtime linux-x64"
               zipAfterPublish: false
               modifyOutputPath: false
 
           # Verificar arquivos publicados
           - task: Bash@3
-            displayName: 'Verificar arquivos publicados'
+            displayName: "Verificar arquivos publicados"
             inputs:
-              targetType: 'inline'
+              targetType: "inline"
               script: |
                 echo "Arquivos no diretório publish:"
                 ls -la $(Build.ArtifactStagingDirectory)/publish/
                 echo ""
-                echo "Procurando por DLL:"
-                find $(Build.ArtifactStagingDirectory)/publish -name "*.dll" -type f
+                echo "Verificando SkillBridge.API.dll:"
+                if [ -f "$(Build.ArtifactStagingDirectory)/publish/SkillBridge.API.dll" ]; then
+                  echo "OK: SkillBridge.API.dll encontrado na raiz"
+                else
+                  echo "ERRO: SkillBridge.API.dll não encontrado na raiz"
+                  find $(Build.ArtifactStagingDirectory)/publish -name "SkillBridge.API.dll" -type f
+                  exit 1
+                fi
 
-          # Criar ZIP do artefato (arquivos na raiz do ZIP)
-          - task: ArchiveFiles@2
-            displayName: 'Criar ZIP do artefato'
+          # Criar ZIP garantindo que arquivos estão na raiz
+          - task: Bash@3
+            displayName: "Criar ZIP com arquivos na raiz"
             inputs:
-              rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/publish'
-              includeRootFolder: false
-              archiveType: 'zip'
-              archiveFile: '$(Build.ArtifactStagingDirectory)/drop/package.zip'
-              replaceExistingArchive: true
+              targetType: "inline"
+              script: |
+                cd $(Build.ArtifactStagingDirectory)/publish
+                zip -r ../drop/package.zip . -q
+                echo "ZIP criado: $(Build.ArtifactStagingDirectory)/drop/package.zip"
+                echo ""
+                echo "Verificando estrutura do ZIP:"
+                unzip -l ../drop/package.zip | head -20
+                echo ""
+                echo "Verificando se SkillBridge.API.dll está na raiz do ZIP:"
+                if unzip -l ../drop/package.zip | grep -q "^[[:space:]]*[0-9].*SkillBridge.API.dll$"; then
+                  echo "OK: SkillBridge.API.dll está na raiz do ZIP"
+                else
+                  echo "ERRO: SkillBridge.API.dll não está na raiz do ZIP"
+                  unzip -l ../drop/package.zip | grep "SkillBridge.API.dll"
+                  exit 1
+                fi
 
           # Publicar artefato
           - task: PublishBuildArtifacts@1
-            displayName: 'Publicar artefatos'
+            displayName: "Publicar artefatos"
             inputs:
-              pathToPublish: '$(Build.ArtifactStagingDirectory)/drop'
-              artifactName: 'drop'
-              publishLocation: 'Container'
+              pathToPublish: "$(Build.ArtifactStagingDirectory)/drop"
+              artifactName: "drop"
+              publishLocation: "Container"
 
   # Stage 2: Release (Deploy)
   - stage: Deploy
-    displayName: 'Deploy para Azure'
+    displayName: "Deploy para Azure"
     dependsOn: Build
     condition: succeeded()
     jobs:
       - deployment: DeployJob
-        displayName: 'Deploy para Azure App Service'
+        displayName: "Deploy para Azure App Service"
         pool:
-          vmImage: 'ubuntu-latest'
-        environment: 'production'
+          vmImage: "ubuntu-latest"
+        environment: "production"
         strategy:
           runOnce:
             deploy:
               steps:
-                # Checkout do código para executar migrações
+                # Checkout do código apenas para migrations
                 - checkout: self
                   fetchDepth: 0
 
@@ -171,81 +189,74 @@ stages:
                 - download: current
                   artifact: drop
 
-                # Verificar artefato ZIP
+                # Verificar e validar ZIP
                 - task: Bash@3
-                  displayName: 'Verificar artefato ZIP'
+                  displayName: "Validar ZIP do artefato"
                   inputs:
-                    targetType: 'inline'
+                    targetType: "inline"
                     script: |
-                      echo "Conteúdo do artefato:"
-                      ls -la $(Pipeline.Workspace)/drop/
-                      echo ""
-                      # Procurar arquivo ZIP
                       zip_file=$(find $(Pipeline.Workspace)/drop -name "*.zip" -type f | head -1)
-                      if [ -n "$zip_file" ]; then
-                        echo "Arquivo ZIP encontrado: $zip_file"
-                        echo "Verificando conteúdo do ZIP..."
-                        unzip -l "$zip_file" | head -30
-                        echo ""
-                        echo "Verificando se SkillBridge.API.dll está no ZIP:"
-                        unzip -l "$zip_file" | grep "SkillBridge.API.dll" || echo "DLL não encontrado no ZIP"
-                      else
-                        echo "Erro: Nenhum arquivo ZIP encontrado no artefato"
+                      if [ -z "$zip_file" ]; then
+                        echo "ERRO: Nenhum arquivo ZIP encontrado"
                         exit 1
                       fi
 
-                # Instalar .NET SDK
+                      echo "ZIP encontrado: $zip_file"
+                      echo "Tamanho: $(du -h "$zip_file" | cut -f1)"
+                      echo ""
+                      echo "Verificando estrutura do ZIP:"
+                      unzip -l "$zip_file" | head -25
+                      echo ""
+                      echo "Validando se SkillBridge.API.dll está na raiz:"
+                      if unzip -l "$zip_file" | grep -q "^[[:space:]]*[0-9].*SkillBridge.API.dll$"; then
+                        echo "OK: DLL está na raiz do ZIP"
+                      else
+                        echo "ERRO: DLL não está na raiz do ZIP"
+                        unzip -l "$zip_file" | grep "SkillBridge.API.dll" || echo "DLL não encontrado"
+                        exit 1
+                      fi
+
+                # Instalar .NET SDK para migrations
                 - task: UseDotNet@2
-                  displayName: 'Instalar .NET SDK 8.0'
+                  displayName: "Instalar .NET SDK 8.0"
                   inputs:
-                    packageType: 'sdk'
-                    version: '8.0.x'
+                    packageType: "sdk"
+                    version: "8.0.x"
 
-                # Restaurar dependências
+                # Restaurar dependências para migrations
                 - task: DotNetCoreCLI@2
-                  displayName: 'Restaurar pacotes NuGet'
+                  displayName: "Restaurar pacotes NuGet para migrations"
                   inputs:
-                    command: 'restore'
-                    projects: '$(projectPath)'
+                    command: "restore"
+                    projects: "$(projectPath)"
 
-                # Compilar projeto
+                # Build do projeto para migrations
                 - task: DotNetCoreCLI@2
-                  displayName: 'Compilar projeto para migrations'
+                  displayName: "Compilar projeto para migrations"
                   inputs:
-                    command: 'build'
-                    projects: '$(projectPath)'
-                    arguments: '--configuration $(buildConfiguration) --no-restore'
+                    command: "build"
+                    projects: "$(projectPath)"
+                    arguments: "--configuration $(buildConfiguration) --no-restore"
 
                 # Instalar EF Core Tools e Executar Migrations
                 - task: Bash@3
-                  displayName: 'Instalar EF Core Tools e Executar Migrations'
+                  displayName: "Executar Migrations do Banco de Dados"
                   inputs:
-                    targetType: 'inline'
+                    targetType: "inline"
                     script: |
                       set -e
-                      
+
                       # Instalar/Atualizar EF Core Tools
                       dotnet tool install --global dotnet-ef --version 8.0.6 || dotnet tool update --global dotnet-ef --version 8.0.6
-                      
-                      # Adicionar ao PATH
                       export PATH="$PATH:/home/vsts/.dotnet/tools"
-                      
-                      # Verificar instalação
-                      echo "Verificando versão do dotnet-ef:"
+
+                      echo "Versão do dotnet-ef:"
                       dotnet ef --version
-                      
-                      # Testar conexão primeiro
-                      echo "Testando conexão com o banco de dados..."
-                      echo "Host: $(DB_SERVER)"
-                      echo "Database: $(DB_NAME)"
-                      echo "User: $(DB_USER)"
-                      echo "Password length: ${#DB_PASSWORD} caracteres"
-                      
-                      # Construir connection string manualmente
+
+                      # Construir connection string
                       CONN_STR="Host=$(DB_SERVER);Database=$(DB_NAME);Username=$(DB_USER);Password=$(DB_PASSWORD);SSL Mode=Require;Trust Server Certificate=true"
-                      
-                      # Executar migrations com timeout de 5 minutos
-                      echo "Executando migrations (timeout: 5 minutos)..."
+
+                      echo "Executando migrations..."
                       timeout 300 dotnet ef database update \
                         --project $(projectPath) \
                         --connection "$CONN_STR" \
@@ -253,34 +264,48 @@ stages:
                         --verbose 2>&1 || {
                         EXIT_CODE=$?
                         if [ $EXIT_CODE -eq 124 ]; then
-                          echo "Erro: Timeout ao executar migrations (5 minutos)"
+                          echo "ERRO: Timeout ao executar migrations"
                         else
-                          echo "Erro ao executar migrations (código: $EXIT_CODE)"
-                          echo "Verifique se a senha está correta no Variable Group"
+                          echo "ERRO ao executar migrations (código: $EXIT_CODE)"
                         fi
                         exit $EXIT_CODE
                       }
-                      
-                      echo "Migrations executadas com sucesso!"
-                  env:
-                    ConnectionStrings__DefaultConnection: '$(DB_CONNECTION_STRING)'
 
-                # Configurar variáveis de ambiente e remover startup command via Azure CLI
+                      echo "Migrations executadas com sucesso!"
+
+                # Limpar App Service e configurar variáveis
                 - task: AzureCLI@2
-                  displayName: 'Configurar App Service'
+                  displayName: "Limpar e Configurar App Service"
                   inputs:
-                    azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
-                    scriptType: 'bash'
-                    scriptLocation: 'inlineScript'
+                    azureSubscription: "$(AZURE_SERVICE_CONNECTION)"
+                    scriptType: "bash"
+                    scriptLocation: "inlineScript"
                     inlineScript: |
-                      echo "Removendo startup command para detecção automática..."
-                      az webapp config set \
+                      echo "Limpando conteúdo antigo do App Service..."
+                      # Parar o App Service temporariamente para limpar
+                      az webapp stop \
                         --name $(WEB_APP_NAME) \
                         --resource-group $(RESOURCE_GROUP_NAME) \
-                        --startup-file "" \
-                        --output none
-                      
-                      echo "Configurando variáveis de ambiente no App Service..."
+                        --output none || true
+
+                      # Limpar diretório wwwroot via Kudu API
+                      PUBLISH_PROFILE=$(az webapp deployment list-publishing-profiles \
+                        --name $(WEB_APP_NAME) \
+                        --resource-group $(RESOURCE_GROUP_NAME) \
+                        --xml)
+
+                      USERNAME=$(echo "$PUBLISH_PROFILE" | grep -oP '(?<=userName=")[^"]*' | head -1)
+                      PASSWORD=$(echo "$PUBLISH_PROFILE" | grep -oP '(?<=userPWD=")[^"]*' | head -1)
+
+                      if [ -n "$USERNAME" ] && [ -n "$PASSWORD" ]; then
+                        echo "Limpando diretório wwwroot..."
+                        curl -s -X DELETE \
+                          -u "$USERNAME:$PASSWORD" \
+                          "https://$(WEB_APP_NAME).scm.azurewebsites.net/api/vfs/site/wwwroot/" \
+                          -H "If-Match: *" || echo "Aviso: Não foi possível limpar (pode estar vazio)"
+                      fi
+
+                      echo "Configurando variáveis de ambiente..."
                       az webapp config appsettings set \
                         --name $(WEB_APP_NAME) \
                         --resource-group $(RESOURCE_GROUP_NAME) \
@@ -288,122 +313,46 @@ stages:
                         ConnectionStrings__DefaultConnection="$(DB_CONNECTION_STRING)" \
                         SCM_DO_BUILD_DURING_DEPLOYMENT=false \
                         --output none
-                      
-                      echo "Configuração concluída com sucesso!"
 
-                # Verificar e preparar ZIP para deploy
-                - task: Bash@3
-                  displayName: 'Verificar e preparar ZIP para deploy'
-                  inputs:
-                    targetType: 'inline'
-                    script: |
-                      echo "Procurando arquivo ZIP..."
-                      zip_file=$(find $(Pipeline.Workspace)/drop -name "*.zip" -type f | head -1)
-                      if [ -z "$zip_file" ]; then
-                        echo "Erro: Nenhum arquivo ZIP encontrado"
-                        exit 1
-                      fi
-                      
-                      echo "ZIP encontrado: $zip_file"
-                      echo "Tamanho do ZIP: $(du -h "$zip_file" | cut -f1)"
-                      echo ""
-                      echo "Verificando estrutura do ZIP (primeiros 30 arquivos):"
-                      unzip -l "$zip_file" | head -35
-                      echo ""
-                      echo "Verificando se SkillBridge.API.dll está na raiz do ZIP:"
-                      if unzip -l "$zip_file" | grep -q "^[[:space:]]*[0-9].*SkillBridge.API.dll$"; then
-                        echo "OK: SkillBridge.API.dll encontrado na raiz do ZIP"
-                      else
-                        echo "AVISO: SkillBridge.API.dll pode estar em subpasta"
-                        unzip -l "$zip_file" | grep "SkillBridge.API.dll" || echo "DLL não encontrado no ZIP"
-                      fi
-                      
-                      # Usar o ZIP encontrado diretamente
-                      echo "ZIP pronto para deploy: $zip_file"
-
-                # Deploy para Azure App Service usando ZIP Deploy API
-                - task: AzureCLI@2
-                  displayName: 'Deploy ZIP para App Service'
-                  inputs:
-                    azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
-                    scriptType: 'bash'
-                    scriptLocation: 'inlineScript'
-                    inlineScript: |
-                      zip_file=$(find $(Pipeline.Workspace)/drop -name "*.zip" -type f | head -1)
-                      if [ -z "$zip_file" ]; then
-                        echo "Erro: ZIP não encontrado"
-                        exit 1
-                      fi
-                      
-                      echo "Fazendo deploy do ZIP: $zip_file"
-                      echo "App Service: $(WEB_APP_NAME)"
-                      echo "Resource Group: $(RESOURCE_GROUP_NAME)"
-                      
-                      # Usar ZIP Deploy via Kudu API
-                      DEPLOY_URL="https://$(WEB_APP_NAME).scm.azurewebsites.net/api/zipdeploy"
-                      
-                      # Obter credenciais de publicação
-                      PUBLISH_PROFILE=$(az webapp deployment list-publishing-profiles \
+                      # Remover startup command para detecção automática
+                      az webapp config set \
                         --name $(WEB_APP_NAME) \
                         --resource-group $(RESOURCE_GROUP_NAME) \
-                        --xml)
-                      
-                      USERNAME=$(echo "$PUBLISH_PROFILE" | grep -oP '(?<=userName=")[^"]*' | head -1)
-                      PASSWORD=$(echo "$PUBLISH_PROFILE" | grep -oP '(?<=userPWD=")[^"]*' | head -1)
-                      
-                      if [ -z "$USERNAME" ] || [ -z "$PASSWORD" ]; then
-                        echo "Erro: Não foi possível obter credenciais de publicação"
-                        exit 1
-                      fi
-                      
-                      echo "Fazendo upload do ZIP..."
-                      response=$(curl -s -w "\n%{http_code}" -X POST \
-                        -u "$USERNAME:$PASSWORD" \
-                        --data-binary @"$zip_file" \
-                        -H "Content-Type: application/zip" \
-                        "$DEPLOY_URL")
-                      
-                      http_code=$(echo "$response" | tail -1)
-                      body=$(echo "$response" | sed '$d')
-                      
-                      echo "Status HTTP: $http_code"
-                      if [ "$http_code" -eq 200 ] || [ "$http_code" -eq 201 ]; then
-                        echo "Deploy realizado com sucesso!"
-                      else
-                        echo "Erro no deploy. Resposta:"
-                        echo "$body"
-                        exit 1
-                      fi
+                        --startup-file "" \
+                        --output none
+
+                      echo "Configuração concluída!"
+
+                # Deploy usando AzureWebApp task nativa
+                - task: AzureWebApp@1
+                  displayName: "Deploy para Azure App Service"
+                  inputs:
+                    azureSubscription: "$(AZURE_SERVICE_CONNECTION)"
+                    appName: "$(WEB_APP_NAME)"
+                    package: "$(Pipeline.Workspace)/drop/package.zip"
+                    deploymentMethod: "auto"
 
                 # Health check com retry
                 - task: Bash@3
-                  displayName: 'Verificar health check'
+                  displayName: "Verificar health check"
                   continueOnError: true
                   inputs:
-                    targetType: 'inline'
+                    targetType: "inline"
                     script: |
                       url="$(WEB_APP_URL)/health"
                       echo "Verificando health check: $url"
-                      
-                      # Aguardar um pouco para a aplicação iniciar
-                      echo "Aguardando 30 segundos para a aplicação iniciar..."
+
+                      echo "Aguardando 30 segundos para aplicação iniciar..."
                       sleep 30
-                      
+
                       max_attempts=10
                       attempt=1
                       wait_time=15
-                      
+
                       while [ $attempt -le $max_attempts ]; do
                         echo "Tentativa $attempt/$max_attempts..."
                         response=$(curl -s -o /dev/null -w "%{http_code}" "$url" 2>&1 || echo "000")
                         echo "Status HTTP: $response"
-                        
-                        # Tentar também a raiz e swagger para debug
-                        if [ "$response" -ne 200 ]; then
-                          echo "Testando outros endpoints..."
-                          curl -s -o /dev/null -w "Root: %{http_code}\n" "$(WEB_APP_URL)/" || true
-                          curl -s -o /dev/null -w "Swagger: %{http_code}\n" "$(WEB_APP_URL)/swagger" || true
-                        fi
                         
                         if [ "$response" -eq 200 ]; then
                           echo "Health check passou!"
@@ -411,14 +360,13 @@ stages:
                         fi
                         
                         if [ $attempt -lt $max_attempts ]; then
-                          echo "Aguardando $wait_time segundos antes da próxima tentativa..."
+                          echo "Aguardando $wait_time segundos..."
                           sleep $wait_time
                         fi
                         
                         attempt=$((attempt + 1))
                       done
-                      
+
                       echo "Aviso: Health check não passou após $max_attempts tentativas"
-                      echo "Verifique os logs do App Service no Portal Azure"
-                      echo "URL: https://portal.azure.com/#@/resource/subscriptions/06020eb7-c3f7-4d52-8861-3f97eff0fd1e/resourceGroups/rg-skillbridge-devops/providers/Microsoft.Web/sites/$(WEB_APP_NAME)/logStream"
+                      echo "Verifique os logs: https://portal.azure.com/#@/resource/subscriptions/06020eb7-c3f7-4d52-8861-3f97eff0fd1e/resourceGroups/rg-skillbridge-devops/providers/Microsoft.Web/sites/$(WEB_APP_NAME)/logStream"
                       exit 0
