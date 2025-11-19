@@ -1,4 +1,4 @@
-# Azure Pipelines YAML - Build e Deploy
+# Azure Pipelines YAML - Build e Deplo
 # Pipeline simplificada e otimizada para .NET 8.0 + PostgreSQL
 
 trigger:
