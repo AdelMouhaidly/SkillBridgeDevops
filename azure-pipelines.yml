@@ -192,12 +192,17 @@ stages:
                       echo "Testando conexão com o banco de dados..."
                       echo "Host: $(DB_SERVER)"
                       echo "Database: $(DB_NAME)"
+                      echo "User: $(DB_USER)"
+                      echo "Password length: ${#DB_PASSWORD} caracteres"
+                      
+                      # Construir connection string manualmente para evitar problemas com caracteres especiais
+                      CONN_STR="Host=$(DB_SERVER);Database=$(DB_NAME);Username=$(DB_USER);Password=$(DB_PASSWORD);SSL Mode=Require;Trust Server Certificate=true"
                       
                       # Executar migrations com timeout de 5 minutos
                       echo "Executando migrations (timeout: 5 minutos)..."
                       timeout 300 dotnet ef database update \
                         --project $(projectPath) \
-                        --connection "$(DB_CONNECTION_STRING)" \
+                        --connection "$CONN_STR" \
                         --no-build \
                         --verbose 2>&1 || {
                         EXIT_CODE=$?
@@ -205,6 +210,7 @@ stages:
                           echo "❌ Timeout ao executar migrations (5 minutos)"
                         else
                           echo "❌ Erro ao executar migrations (código: $EXIT_CODE)"
+                          echo "Verifique se a senha está correta no Variable Group"
                         fi
                         exit $EXIT_CODE
                       }
