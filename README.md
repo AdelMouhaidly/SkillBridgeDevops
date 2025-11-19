@@ -6,6 +6,10 @@ SkillBridge é uma API desenvolvida em .NET 8.0 que apoia a solução da Global 
 
 A aplicação está hospedada em nuvem utilizando Azure App Service (PaaS) e Azure Database for PostgreSQL (PaaS), com CI/CD automatizado através do Azure DevOps Pipelines.
 
+## Vídeo Demonstrativo
+
+ [Assista ao vídeo demonstrativo no YouTube](https://youtu.be/yuugGUVVMnQ?si=f9VZ5kkYSMa5TN5W)
+
 ## Arquitetura
 
 ![Arquitetura Azure](arquitetura.jpg)
@@ -104,8 +108,7 @@ A API serve diferentes tipos de clientes:
 
 ## Link da Organização Azure DevOps
 
-[Adicione aqui o link da sua organização Azure DevOps]
-Exemplo: https://dev.azure.com/[sua-organizacao]/SkillBridge
+https://dev.azure.com/RM558485/SkillBridge
 
 ## Pré-requisitos
 
