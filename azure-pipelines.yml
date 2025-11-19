@@ -171,9 +171,9 @@ stages:
                 - download: current
                   artifact: drop
 
-                # Extrair arquivos do ZIP
+                # Verificar artefato ZIP
                 - task: Bash@3
-                  displayName: 'Extrair artefato ZIP'
+                  displayName: 'Verificar artefato ZIP'
                   inputs:
                     targetType: 'inline'
                     script: |
@@ -184,21 +184,15 @@ stages:
                       zip_file=$(find $(Pipeline.Workspace)/drop -name "*.zip" -type f | head -1)
                       if [ -n "$zip_file" ]; then
                         echo "Arquivo ZIP encontrado: $zip_file"
-                        echo "Extraindo ZIP para pasta deploy..."
-                        mkdir -p $(Pipeline.Workspace)/drop/deploy
-                        unzip -q "$zip_file" -d $(Pipeline.Workspace)/drop/deploy
-                        echo "Conteúdo extraído:"
-                        ls -la $(Pipeline.Workspace)/drop/deploy/
+                        echo "Verificando conteúdo do ZIP..."
+                        unzip -l "$zip_file" | head -30
                         echo ""
-                        echo "Procurando por SkillBridge.API.dll:"
-                        find $(Pipeline.Workspace)/drop/deploy -name "SkillBridge.API.dll" -type f || echo "DLL não encontrado"
+                        echo "Verificando se SkillBridge.API.dll está no ZIP:"
+                        unzip -l "$zip_file" | grep "SkillBridge.API.dll" || echo "DLL não encontrado no ZIP"
                       else
                         echo "Erro: Nenhum arquivo ZIP encontrado no artefato"
                         exit 1
                       fi
-                      echo ""
-                      echo "Estrutura final para deploy:"
-                      ls -la $(Pipeline.Workspace)/drop/deploy/ | head -20
 
                 # Instalar .NET SDK
                 - task: UseDotNet@2
@@ -271,14 +265,21 @@ stages:
                   env:
                     ConnectionStrings__DefaultConnection: '$(DB_CONNECTION_STRING)'
 
-                # Configurar variáveis de ambiente via Azure CLI
+                # Configurar variáveis de ambiente e remover startup command via Azure CLI
                 - task: AzureCLI@2
-                  displayName: 'Configurar variáveis de ambiente'
+                  displayName: 'Configurar App Service'
                   inputs:
                     azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
                     scriptType: 'bash'
                     scriptLocation: 'inlineScript'
                     inlineScript: |
+                      echo "Removendo startup command para detecção automática..."
+                      az webapp config set \
+                        --name $(WEB_APP_NAME) \
+                        --resource-group $(RESOURCE_GROUP_NAME) \
+                        --startup-file "" \
+                        --output none
+                      
                       echo "Configurando variáveis de ambiente no App Service..."
                       az webapp config appsettings set \
                         --name $(WEB_APP_NAME) \
@@ -288,14 +289,24 @@ stages:
                         SCM_DO_BUILD_DURING_DEPLOYMENT=false \
                         --output none
                       
-                      # Remover startup command - deixar o App Service detectar automaticamente
-                      az webapp config set \
-                        --name $(WEB_APP_NAME) \
-                        --resource-group $(RESOURCE_GROUP_NAME) \
-                        --startup-file "" \
-                        --output none
-                      
-                      echo "Variáveis de ambiente configuradas com sucesso!"
+                      echo "Configuração concluída com sucesso!"
+
+                # Deploy para Azure App Service usando ZIP
+                - task: Bash@3
+                  displayName: 'Preparar ZIP para deploy'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      zip_file=$(find $(Pipeline.Workspace)/drop -name "*.zip" -type f | head -1)
+                      if [ -n "$zip_file" ]; then
+                        echo "ZIP encontrado: $zip_file"
+                        # Copiar ZIP para local padrão
+                        cp "$zip_file" $(Pipeline.Workspace)/drop/deploy.zip
+                        echo "ZIP preparado para deploy: $(Pipeline.Workspace)/drop/deploy.zip"
+                      else
+                        echo "Erro: ZIP não encontrado"
+                        exit 1
+                      fi
 
                 # Deploy para Azure App Service
                 - task: AzureWebApp@1
@@ -303,7 +314,7 @@ stages:
                   inputs:
                     azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
                     appName: '$(WEB_APP_NAME)'
-                    package: '$(Pipeline.Workspace)/drop/deploy'
+                    package: '$(Pipeline.Workspace)/drop/deploy.zip'
                     deploymentMethod: 'auto'
 
                 # Health check com retry
