@@ -108,7 +108,7 @@ stages:
               codeCoverageTool: 'Cobertura'
               summaryFileLocation: '$(Agent.TempDirectory)/**/coverage.cobertura.xml'
 
-          # Publicar artefato (framework-dependent, sem runtime específico)
+          # Publicar artefato (framework-dependent)
           - task: DotNetCoreCLI@2
             displayName: 'Publicar artefato para deploy'
             inputs:
@@ -120,7 +120,7 @@ stages:
 
           # Verificar arquivos publicados
           - task: Bash@3
-            displayName: 'Listar arquivos publicados'
+            displayName: 'Verificar arquivos publicados'
             inputs:
               targetType: 'inline'
               script: |
@@ -130,11 +130,21 @@ stages:
                 echo "Procurando por DLL:"
                 find $(Build.ArtifactStagingDirectory)/publish -name "*.dll" -type f
 
+          # Criar ZIP do artefato
+          - task: ArchiveFiles@2
+            displayName: 'Criar ZIP do artefato'
+            inputs:
+              rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/publish'
+              includeRootFolder: false
+              archiveType: 'zip'
+              archiveFile: '$(Build.ArtifactStagingDirectory)/drop/$(Build.BuildId).zip'
+              replaceExistingArchive: true
+
           # Publicar artefato
           - task: PublishBuildArtifacts@1
             displayName: 'Publicar artefatos'
             inputs:
-              pathToPublish: '$(Build.ArtifactStagingDirectory)/publish'
+              pathToPublish: '$(Build.ArtifactStagingDirectory)/drop'
               artifactName: 'drop'
               publishLocation: 'Container'
 
@@ -161,28 +171,34 @@ stages:
                 - download: current
                   artifact: drop
 
-                # Verificar arquivos baixados e ajustar estrutura
+                # Extrair arquivos do ZIP
                 - task: Bash@3
-                  displayName: 'Verificar e ajustar estrutura do artefato'
+                  displayName: 'Extrair artefato ZIP'
                   inputs:
                     targetType: 'inline'
                     script: |
-                      echo "Estrutura do artefato:"
+                      echo "Conteúdo do artefato:"
                       ls -la $(Pipeline.Workspace)/drop/
                       echo ""
-                      echo "Procurando por SkillBridge.API.dll:"
-                      find $(Pipeline.Workspace)/drop -name "SkillBridge.API.dll" -type f || echo "Não encontrado"
-                      echo ""
-                      # Se o DLL estiver em subpasta, mover para raiz
-                      if [ -f "$(Pipeline.Workspace)/drop/SkillBridge.API/SkillBridge.API.dll" ]; then
-                        echo "Movendo arquivos de subpasta para raiz..."
-                        cp -r $(Pipeline.Workspace)/drop/SkillBridge.API/* $(Pipeline.Workspace)/drop/
-                        rm -rf $(Pipeline.Workspace)/drop/SkillBridge.API
-                        echo "Arquivos movidos!"
+                      # Procurar arquivo ZIP
+                      zip_file=$(find $(Pipeline.Workspace)/drop -name "*.zip" -type f | head -1)
+                      if [ -n "$zip_file" ]; then
+                        echo "Arquivo ZIP encontrado: $zip_file"
+                        echo "Extraindo ZIP para pasta deploy..."
+                        mkdir -p $(Pipeline.Workspace)/drop/deploy
+                        unzip -q "$zip_file" -d $(Pipeline.Workspace)/drop/deploy
+                        echo "Conteúdo extraído:"
+                        ls -la $(Pipeline.Workspace)/drop/deploy/
+                        echo ""
+                        echo "Procurando por SkillBridge.API.dll:"
+                        find $(Pipeline.Workspace)/drop/deploy -name "SkillBridge.API.dll" -type f || echo "DLL não encontrado"
+                      else
+                        echo "Erro: Nenhum arquivo ZIP encontrado no artefato"
+                        exit 1
                       fi
                       echo ""
-                      echo "Arquivos finais na raiz:"
-                      ls -la $(Pipeline.Workspace)/drop/ | head -20
+                      echo "Estrutura final para deploy:"
+                      ls -la $(Pipeline.Workspace)/drop/deploy/ | head -20
 
                 # Instalar .NET SDK
                 - task: UseDotNet@2
@@ -214,7 +230,7 @@ stages:
                     script: |
                       set -e
                       
-                      # Instalar/Atualizar EF Core Tools para versão mais recente
+                      # Instalar/Atualizar EF Core Tools
                       dotnet tool install --global dotnet-ef --version 8.0.6 || dotnet tool update --global dotnet-ef --version 8.0.6
                       
                       # Adicionar ao PATH
@@ -231,7 +247,7 @@ stages:
                       echo "User: $(DB_USER)"
                       echo "Password length: ${#DB_PASSWORD} caracteres"
                       
-                      # Construir connection string manualmente para evitar problemas com caracteres especiais
+                      # Construir connection string manualmente
                       CONN_STR="Host=$(DB_SERVER);Database=$(DB_NAME);Username=$(DB_USER);Password=$(DB_PASSWORD);SSL Mode=Require;Trust Server Certificate=true"
                       
                       # Executar migrations com timeout de 5 minutos
@@ -243,15 +259,15 @@ stages:
                         --verbose 2>&1 || {
                         EXIT_CODE=$?
                         if [ $EXIT_CODE -eq 124 ]; then
-                          echo "❌ Timeout ao executar migrations (5 minutos)"
+                          echo "Erro: Timeout ao executar migrations (5 minutos)"
                         else
-                          echo "❌ Erro ao executar migrations (código: $EXIT_CODE)"
+                          echo "Erro ao executar migrations (código: $EXIT_CODE)"
                           echo "Verifique se a senha está correta no Variable Group"
                         fi
                         exit $EXIT_CODE
                       }
                       
-                      echo "✅ Migrations executadas com sucesso!"
+                      echo "Migrations executadas com sucesso!"
                   env:
                     ConnectionStrings__DefaultConnection: '$(DB_CONNECTION_STRING)'
 
@@ -287,7 +303,7 @@ stages:
                   inputs:
                     azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
                     appName: '$(WEB_APP_NAME)'
-                    package: '$(Pipeline.Workspace)/drop'
+                    package: '$(Pipeline.Workspace)/drop/deploy'
                     deploymentMethod: 'auto'
 
                 # Health check com retry
@@ -321,7 +337,7 @@ stages:
                         fi
                         
                         if [ "$response" -eq 200 ]; then
-                          echo "✅ Health check passou!"
+                          echo "Health check passou!"
                           exit 0
                         fi
                         
@@ -333,7 +349,7 @@ stages:
                         attempt=$((attempt + 1))
                       done
                       
-                      echo "⚠️ Health check não passou após $max_attempts tentativas"
+                      echo "Aviso: Health check não passou após $max_attempts tentativas"
                       echo "Verifique os logs do App Service no Portal Azure"
                       echo "URL: https://portal.azure.com/#@/resource/subscriptions/06020eb7-c3f7-4d52-8861-3f97eff0fd1e/resourceGroups/rg-skillbridge-devops/providers/Microsoft.Web/sites/$(WEB_APP_NAME)/logStream"
                       exit 0
