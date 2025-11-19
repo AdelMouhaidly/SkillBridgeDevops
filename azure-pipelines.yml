@@ -116,6 +116,19 @@ stages:
               projects: '$(projectPath)'
               arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/publish --no-restore --self-contained false'
               zipAfterPublish: false
+              modifyOutputPath: false
+
+          # Verificar arquivos publicados
+          - task: Bash@3
+            displayName: 'Listar arquivos publicados'
+            inputs:
+              targetType: 'inline'
+              script: |
+                echo "Arquivos no diretório publish:"
+                ls -la $(Build.ArtifactStagingDirectory)/publish/
+                echo ""
+                echo "Procurando por DLL:"
+                find $(Build.ArtifactStagingDirectory)/publish -name "*.dll" -type f
 
           # Publicar artefato
           - task: PublishBuildArtifacts@1
@@ -147,6 +160,29 @@ stages:
                 # Download do artefato
                 - download: current
                   artifact: drop
+
+                # Verificar arquivos baixados e ajustar estrutura
+                - task: Bash@3
+                  displayName: 'Verificar e ajustar estrutura do artefato'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      echo "Estrutura do artefato:"
+                      ls -la $(Pipeline.Workspace)/drop/
+                      echo ""
+                      echo "Procurando por SkillBridge.API.dll:"
+                      find $(Pipeline.Workspace)/drop -name "SkillBridge.API.dll" -type f || echo "Não encontrado"
+                      echo ""
+                      # Se o DLL estiver em subpasta, mover para raiz
+                      if [ -f "$(Pipeline.Workspace)/drop/SkillBridge.API/SkillBridge.API.dll" ]; then
+                        echo "Movendo arquivos de subpasta para raiz..."
+                        cp -r $(Pipeline.Workspace)/drop/SkillBridge.API/* $(Pipeline.Workspace)/drop/
+                        rm -rf $(Pipeline.Workspace)/drop/SkillBridge.API
+                        echo "Arquivos movidos!"
+                      fi
+                      echo ""
+                      echo "Arquivos finais na raiz:"
+                      ls -la $(Pipeline.Workspace)/drop/ | head -20
 
                 # Instalar .NET SDK
                 - task: UseDotNet@2
