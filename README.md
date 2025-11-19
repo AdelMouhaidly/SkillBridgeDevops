@@ -8,7 +8,80 @@ A aplicação está hospedada em nuvem utilizando Azure App Service (PaaS) e Azu
 
 ## Arquitetura
 
+![Arquitetura Azure](arquitetura.jpg)
 
+A arquitetura do SkillBridge é dividida em cinco áreas principais:
+
+#### 1. Desenvolvimento
+
+- **Desenvolvedores**: Trabalham com .NET 8.0 e Entity Framework Core
+- **Ambiente Local**: Utiliza Docker PostgreSQL para desenvolvimento e testes locais
+- Os desenvolvedores fazem commit/push para o Azure Repos e gerenciam work items no Azure Boards
+
+#### 2. Azure DevOps
+
+- **Azure Repos**: Repositório Git centralizado que recebe commits e pushes dos desenvolvedores
+- **Azure Pipelines**: Pipeline de CI/CD automatizado que é acionado automaticamente quando há mudanças no repositório
+- **Azure Boards**: Ferramenta de gerenciamento de projetos e work items
+- **Variable Group**: Grupo de variáveis (`skillbridge-variables`) que armazena configurações e secrets do projeto
+
+#### 3. Azure Cloud - Produção (Região: Brazil South)
+
+A infraestrutura de produção é organizada em três sub-seções:
+
+**Compute:**
+
+- **Azure App Service**: Hospeda a aplicação ASP.NET Core .NET 8.0
+- **App Service Plan**: Plano B1 Linux que fornece os recursos computacionais
+
+**Database:**
+
+- **PostgreSQL Flexible Server**: Banco de dados PaaS (Platform as a Service) que armazena todos os dados da aplicação
+- **Database**: `skillbridgedb` - banco de dados principal do SkillBridge
+
+**Infrastructure:**
+
+- **Resource Group**: `rg-skillbridge-devops` - agrupa todos os recursos relacionados
+- **Firewall Rules**: Configurado para permitir conexões de serviços Azure
+
+#### 4. Clientes e Aplicações
+
+A API serve diferentes tipos de clientes:
+
+- **Swagger UI**: Interface de documentação interativa da API
+- **Web Applications**: Aplicações frontend que consomem a API
+- **Mobile Apps**: Aplicativos iOS e Android
+- **Health Check**: Endpoint `/health` para monitoramento da saúde da aplicação
+
+#### 5. Fluxos e Processos
+
+**Processo de Build:**
+
+1. Restauração de dependências
+2. Compilação do projeto
+3. Execução de testes unitários
+4. Publicação de artefatos
+
+**Processo de Deploy:**
+
+1. Execução de migrations do banco de dados
+2. Configuração do App Service
+3. Deploy da aplicação
+4. Health check pós-deploy
+
+**Funcionalidades:**
+
+- CRUD completo para Usuários e Vagas
+- Paginação e HATEOAS em todas as respostas
+- Versionamento de API (v1/v2)
+- ML.NET para cálculo de match de competências
+
+**Segurança:**
+
+- Secrets armazenados no Azure DevOps
+- SSL/TLS habilitado
+- Firewall configurado
+- Branch protection ativada
 
 ### Componentes Principais
 
@@ -531,7 +604,6 @@ SkillBridgeNET/
 - [Entity Framework Core](https://learn.microsoft.com/ef/core/)
 
 ## Autores
-
 
 - Afonso Correia Pereira - RM557863 - 2TDSA
 - Adel Mouhaidly - RM557705 - 2TDSA
