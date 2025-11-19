@@ -193,6 +193,10 @@ stages:
                     scriptType: "bash"
                     scriptLocation: "inlineScript"
                     inlineScript: |
+                      set -e
+                      echo "Verificando subscription..."
+                      az account show
+                      echo ""
                       echo "Configurando variáveis de ambiente..."
                       az webapp config appsettings set \
                         --name $(WEB_APP_NAME) \
