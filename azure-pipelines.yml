@@ -114,7 +114,7 @@ stages:
             inputs:
               command: 'publish'
               projects: '$(projectPath)'
-              arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/publish --no-restore --self-contained false'
+              arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/publish --no-restore --self-contained false --runtime linux-x64'
               zipAfterPublish: false
 
           # Publicar artefato
@@ -236,11 +236,11 @@ stages:
                         SCM_DO_BUILD_DURING_DEPLOYMENT=false \
                         --output none
                       
-                      # Configurar startup command
+                      # Remover startup command - deixar o App Service detectar automaticamente
                       az webapp config set \
                         --name $(WEB_APP_NAME) \
                         --resource-group $(RESOURCE_GROUP_NAME) \
-                        --startup-file "dotnet SkillBridge.API.dll" \
+                        --startup-file "" \
                         --output none
                       
                       echo "Variáveis de ambiente configuradas com sucesso!"
@@ -253,7 +253,6 @@ stages:
                     appName: '$(WEB_APP_NAME)'
                     package: '$(Pipeline.Workspace)/drop'
                     deploymentMethod: 'auto'
-                    startUpCommand: 'dotnet SkillBridge.API.dll'
 
                 # Health check com retry
                 - task: Bash@3
