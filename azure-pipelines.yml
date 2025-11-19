@@ -1,6 +1,5 @@
-# Azure Pipelines YAML para Build e Release
-# Build: Compila, testa e publica artefatos
-# Release: Faz deploy automático no Azure App Service
+# Azure Pipelines YAML - Build e Deploy
+# Pipeline simplificada e otimizada para .NET 8.0 + PostgreSQL
 
 trigger:
   branches:
@@ -40,33 +39,24 @@ stages:
         displayName: "Compilar e Testar"
         pool:
           vmImage: "ubuntu-latest"
-
         steps:
-          # Checkout do código
           - checkout: self
             fetchDepth: 0
 
-          # Configurar .NET SDK
           - task: UseDotNet@2
             displayName: "Instalar .NET SDK 8.0"
             inputs:
               packageType: "sdk"
               version: "8.0.x"
 
-          # Restaurar dependências
           - task: DotNetCoreCLI@2
-            displayName: "Restaurar pacotes NuGet"
+            displayName: "Restaurar pacotes"
             inputs:
               command: "restore"
-              projects: "$(projectPath)"
+              projects: |
+                $(projectPath)
+                $(testProjectPath)
 
-          - task: DotNetCoreCLI@2
-            displayName: "Restaurar pacotes de testes"
-            inputs:
-              command: "restore"
-              projects: "$(testProjectPath)"
-
-          # Build do projeto
           - task: DotNetCoreCLI@2
             displayName: "Compilar projeto"
             inputs:
@@ -74,15 +64,13 @@ stages:
               projects: "$(projectPath)"
               arguments: "--configuration $(buildConfiguration) --no-restore"
 
-          # Build do projeto de testes
           - task: DotNetCoreCLI@2
-            displayName: "Compilar projeto de testes"
+            displayName: "Compilar testes"
             inputs:
               command: "build"
               projects: "$(testProjectPath)"
               arguments: "--configuration $(buildConfiguration) --no-restore"
 
-          # Executar testes
           - task: DotNetCoreCLI@2
             displayName: "Executar testes unitários"
             inputs:
@@ -91,7 +79,6 @@ stages:
               arguments: '--configuration $(buildConfiguration) --no-build --collect:"XPlat Code Coverage" --logger "trx;LogFileName=test-results.trx"'
               continueOnError: false
 
-          # Publicar resultados dos testes
           - task: PublishTestResults@2
             displayName: "Publicar resultados dos testes"
             condition: always()
@@ -100,7 +87,6 @@ stages:
               testResultsFiles: "$(Agent.TempDirectory)/**/*.trx"
               failTaskOnFailedTests: false
 
-          # Publicar cobertura de código
           - task: PublishCodeCoverageResults@1
             displayName: "Publicar cobertura de código"
             condition: always()
@@ -108,57 +94,24 @@ stages:
               codeCoverageTool: "Cobertura"
               summaryFileLocation: "$(Agent.TempDirectory)/**/coverage.cobertura.xml"
 
-          # Publicar artefato com runtime específico (publish faz restore automaticamente)
           - task: DotNetCoreCLI@2
-            displayName: "Publicar artefato para deploy"
+            displayName: "Publicar aplicação"
             inputs:
               command: "publish"
               projects: "$(projectPath)"
-              arguments: "--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/publish --self-contained false --runtime linux-x64"
+              arguments: "--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/publish --no-restore"
               zipAfterPublish: false
               modifyOutputPath: false
 
-          # Verificar arquivos publicados
-          - task: Bash@3
-            displayName: "Verificar arquivos publicados"
+          - task: ArchiveFiles@2
+            displayName: "Criar pacote ZIP"
             inputs:
-              targetType: "inline"
-              script: |
-                echo "Arquivos no diretório publish:"
-                ls -la $(Build.ArtifactStagingDirectory)/publish/
-                echo ""
-                echo "Verificando SkillBridge.API.dll:"
-                if [ -f "$(Build.ArtifactStagingDirectory)/publish/SkillBridge.API.dll" ]; then
-                  echo "OK: SkillBridge.API.dll encontrado na raiz"
-                else
-                  echo "ERRO: SkillBridge.API.dll não encontrado na raiz"
-                  find $(Build.ArtifactStagingDirectory)/publish -name "SkillBridge.API.dll" -type f
-                  exit 1
-                fi
+              rootFolderOrFile: "$(Build.ArtifactStagingDirectory)/publish"
+              includeRootFolder: false
+              archiveType: "zip"
+              archiveFile: "$(Build.ArtifactStagingDirectory)/drop/package.zip"
+              replaceExistingArchive: true
 
-          # Criar ZIP garantindo que arquivos estão na raiz
-          - task: Bash@3
-            displayName: "Criar ZIP com arquivos na raiz"
-            inputs:
-              targetType: "inline"
-              script: |
-                cd $(Build.ArtifactStagingDirectory)/publish
-                zip -r ../drop/package.zip . -q
-                echo "ZIP criado: $(Build.ArtifactStagingDirectory)/drop/package.zip"
-                echo ""
-                echo "Verificando estrutura do ZIP:"
-                unzip -l ../drop/package.zip | head -20
-                echo ""
-                echo "Verificando se SkillBridge.API.dll está na raiz do ZIP:"
-                if unzip -l ../drop/package.zip | grep -q "^[[:space:]]*[0-9].*SkillBridge.API.dll$"; then
-                  echo "OK: SkillBridge.API.dll está na raiz do ZIP"
-                else
-                  echo "ERRO: SkillBridge.API.dll não está na raiz do ZIP"
-                  unzip -l ../drop/package.zip | grep "SkillBridge.API.dll"
-                  exit 1
-                fi
-
-          # Publicar artefato
           - task: PublishBuildArtifacts@1
             displayName: "Publicar artefatos"
             inputs:
@@ -166,7 +119,7 @@ stages:
               artifactName: "drop"
               publishLocation: "Container"
 
-  # Stage 2: Release (Deploy)
+  # Stage 2: Deploy
   - stage: Deploy
     displayName: "Deploy para Azure"
     dependsOn: Build
@@ -181,56 +134,24 @@ stages:
           runOnce:
             deploy:
               steps:
-                # Checkout do código apenas para migrations
                 - checkout: self
                   fetchDepth: 0
 
-                # Download do artefato
                 - download: current
                   artifact: drop
 
-                # Verificar e validar ZIP
-                - task: Bash@3
-                  displayName: "Validar ZIP do artefato"
-                  inputs:
-                    targetType: "inline"
-                    script: |
-                      zip_file=$(find $(Pipeline.Workspace)/drop -name "*.zip" -type f | head -1)
-                      if [ -z "$zip_file" ]; then
-                        echo "ERRO: Nenhum arquivo ZIP encontrado"
-                        exit 1
-                      fi
-
-                      echo "ZIP encontrado: $zip_file"
-                      echo "Tamanho: $(du -h "$zip_file" | cut -f1)"
-                      echo ""
-                      echo "Verificando estrutura do ZIP:"
-                      unzip -l "$zip_file" | head -25
-                      echo ""
-                      echo "Validando se SkillBridge.API.dll está na raiz:"
-                      if unzip -l "$zip_file" | grep -q "^[[:space:]]*[0-9].*SkillBridge.API.dll$"; then
-                        echo "OK: DLL está na raiz do ZIP"
-                      else
-                        echo "ERRO: DLL não está na raiz do ZIP"
-                        unzip -l "$zip_file" | grep "SkillBridge.API.dll" || echo "DLL não encontrado"
-                        exit 1
-                      fi
-
-                # Instalar .NET SDK para migrations
                 - task: UseDotNet@2
                   displayName: "Instalar .NET SDK 8.0"
                   inputs:
                     packageType: "sdk"
                     version: "8.0.x"
 
-                # Restaurar dependências para migrations
                 - task: DotNetCoreCLI@2
-                  displayName: "Restaurar pacotes NuGet para migrations"
+                  displayName: "Restaurar pacotes para migrations"
                   inputs:
                     command: "restore"
                     projects: "$(projectPath)"
 
-                # Build do projeto para migrations
                 - task: DotNetCoreCLI@2
                   displayName: "Compilar projeto para migrations"
                   inputs:
@@ -238,30 +159,23 @@ stages:
                     projects: "$(projectPath)"
                     arguments: "--configuration $(buildConfiguration) --no-restore"
 
-                # Instalar EF Core Tools e Executar Migrations
                 - task: Bash@3
                   displayName: "Executar Migrations do Banco de Dados"
                   inputs:
                     targetType: "inline"
                     script: |
                       set -e
-
-                      # Instalar/Atualizar EF Core Tools
                       dotnet tool install --global dotnet-ef --version 8.0.6 || dotnet tool update --global dotnet-ef --version 8.0.6
                       export PATH="$PATH:/home/vsts/.dotnet/tools"
-
                       echo "Versão do dotnet-ef:"
                       dotnet ef --version
-
-                      # Construir connection string
                       CONN_STR="Host=$(DB_SERVER);Database=$(DB_NAME);Username=$(DB_USER);Password=$(DB_PASSWORD);SSL Mode=Require;Trust Server Certificate=true"
-
                       echo "Executando migrations..."
                       timeout 300 dotnet ef database update \
                         --project $(projectPath) \
                         --connection "$CONN_STR" \
                         --no-build \
-                        --verbose 2>&1 || {
+                        --verbose || {
                         EXIT_CODE=$?
                         if [ $EXIT_CODE -eq 124 ]; then
                           echo "ERRO: Timeout ao executar migrations"
@@ -270,60 +184,23 @@ stages:
                         fi
                         exit $EXIT_CODE
                       }
-
                       echo "Migrations executadas com sucesso!"
 
-                # Limpar App Service e configurar variáveis
                 - task: AzureCLI@2
-                  displayName: "Limpar e Configurar App Service"
+                  displayName: "Configurar App Service"
                   inputs:
                     azureSubscription: "$(AZURE_SERVICE_CONNECTION)"
                     scriptType: "bash"
                     scriptLocation: "inlineScript"
                     inlineScript: |
-                      echo "Limpando conteúdo antigo do App Service..."
-                      # Parar o App Service temporariamente para limpar
-                      az webapp stop \
-                        --name $(WEB_APP_NAME) \
-                        --resource-group $(RESOURCE_GROUP_NAME) \
-                        --output none || true
-
-                      # Limpar diretório wwwroot via Kudu API
-                      PUBLISH_PROFILE=$(az webapp deployment list-publishing-profiles \
-                        --name $(WEB_APP_NAME) \
-                        --resource-group $(RESOURCE_GROUP_NAME) \
-                        --xml)
-
-                      USERNAME=$(echo "$PUBLISH_PROFILE" | grep -oP '(?<=userName=")[^"]*' | head -1)
-                      PASSWORD=$(echo "$PUBLISH_PROFILE" | grep -oP '(?<=userPWD=")[^"]*' | head -1)
-
-                      if [ -n "$USERNAME" ] && [ -n "$PASSWORD" ]; then
-                        echo "Limpando diretório wwwroot..."
-                        curl -s -X DELETE \
-                          -u "$USERNAME:$PASSWORD" \
-                          "https://$(WEB_APP_NAME).scm.azurewebsites.net/api/vfs/site/wwwroot/" \
-                          -H "If-Match: *" || echo "Aviso: Não foi possível limpar (pode estar vazio)"
-                      fi
-
                       echo "Configurando variáveis de ambiente..."
                       az webapp config appsettings set \
                         --name $(WEB_APP_NAME) \
                         --resource-group $(RESOURCE_GROUP_NAME) \
-                        --settings ASPNETCORE_ENVIRONMENT=Production \
-                        ConnectionStrings__DefaultConnection="$(DB_CONNECTION_STRING)" \
-                        SCM_DO_BUILD_DURING_DEPLOYMENT=false \
+                        --settings ASPNETCORE_ENVIRONMENT=Production ConnectionStrings__DefaultConnection="$(DB_CONNECTION_STRING)" SCM_DO_BUILD_DURING_DEPLOYMENT=false \
                         --output none
-
-                      # Remover startup command para detecção automática
-                      az webapp config set \
-                        --name $(WEB_APP_NAME) \
-                        --resource-group $(RESOURCE_GROUP_NAME) \
-                        --startup-file "" \
-                        --output none
-
                       echo "Configuração concluída!"
 
-                # Deploy usando AzureWebApp task nativa
                 - task: AzureWebApp@1
                   displayName: "Deploy para Azure App Service"
                   inputs:
@@ -332,7 +209,6 @@ stages:
                     package: "$(Pipeline.Workspace)/drop/package.zip"
                     deploymentMethod: "auto"
 
-                # Health check com retry
                 - task: Bash@3
                   displayName: "Verificar health check"
                   continueOnError: true
@@ -341,32 +217,21 @@ stages:
                     script: |
                       url="$(WEB_APP_URL)/health"
                       echo "Verificando health check: $url"
-
-                      echo "Aguardando 30 segundos para aplicação iniciar..."
                       sleep 30
-
                       max_attempts=10
                       attempt=1
-                      wait_time=15
-
                       while [ $attempt -le $max_attempts ]; do
                         echo "Tentativa $attempt/$max_attempts..."
                         response=$(curl -s -o /dev/null -w "%{http_code}" "$url" 2>&1 || echo "000")
                         echo "Status HTTP: $response"
-                        
                         if [ "$response" -eq 200 ]; then
                           echo "Health check passou!"
                           exit 0
                         fi
-                        
                         if [ $attempt -lt $max_attempts ]; then
-                          echo "Aguardando $wait_time segundos..."
-                          sleep $wait_time
+                          sleep 15
                         fi
-                        
                         attempt=$((attempt + 1))
                       done
-
                       echo "Aviso: Health check não passou após $max_attempts tentativas"
-                      echo "Verifique os logs: https://portal.azure.com/#@/resource/subscriptions/06020eb7-c3f7-4d52-8861-3f97eff0fd1e/resourceGroups/rg-skillbridge-devops/providers/Microsoft.Web/sites/$(WEB_APP_NAME)/logStream"
                       exit 0
