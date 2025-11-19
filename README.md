@@ -2,7 +2,7 @@
 
 SkillBridge é uma API desenvolvida em .NET 8.0 que apoia a solução da Global Solution FIAP 2025/2 para o tema **O Futuro do Trabalho**. Ela oferece gerenciamento completo de usuários, vagas e aplicações, enriquecido com versionamento de rotas, HATEOAS, paginação e um motor de compatibilidade baseado em ML.NET.
 
-## 🏗️ Arquitetura
+##  Arquitetura
 
 A solução utiliza uma arquitetura em camadas com os seguintes componentes:
 
