@@ -130,14 +130,14 @@ stages:
                 echo "Procurando por DLL:"
                 find $(Build.ArtifactStagingDirectory)/publish -name "*.dll" -type f
 
-          # Criar ZIP do artefato
+          # Criar ZIP do artefato (arquivos na raiz do ZIP)
           - task: ArchiveFiles@2
             displayName: 'Criar ZIP do artefato'
             inputs:
               rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/publish'
               includeRootFolder: false
               archiveType: 'zip'
-              archiveFile: '$(Build.ArtifactStagingDirectory)/drop/$(Build.BuildId).zip'
+              archiveFile: '$(Build.ArtifactStagingDirectory)/drop/package.zip'
               replaceExistingArchive: true
 
           # Publicar artefato
@@ -291,31 +291,89 @@ stages:
                       
                       echo "Configuração concluída com sucesso!"
 
-                # Deploy para Azure App Service usando ZIP
+                # Verificar e preparar ZIP para deploy
                 - task: Bash@3
-                  displayName: 'Preparar ZIP para deploy'
+                  displayName: 'Verificar e preparar ZIP para deploy'
                   inputs:
                     targetType: 'inline'
                     script: |
+                      echo "Procurando arquivo ZIP..."
                       zip_file=$(find $(Pipeline.Workspace)/drop -name "*.zip" -type f | head -1)
-                      if [ -n "$zip_file" ]; then
-                        echo "ZIP encontrado: $zip_file"
-                        # Copiar ZIP para local padrão
-                        cp "$zip_file" $(Pipeline.Workspace)/drop/deploy.zip
-                        echo "ZIP preparado para deploy: $(Pipeline.Workspace)/drop/deploy.zip"
+                      if [ -z "$zip_file" ]; then
+                        echo "Erro: Nenhum arquivo ZIP encontrado"
+                        exit 1
+                      fi
+                      
+                      echo "ZIP encontrado: $zip_file"
+                      echo "Tamanho do ZIP: $(du -h "$zip_file" | cut -f1)"
+                      echo ""
+                      echo "Verificando estrutura do ZIP (primeiros 30 arquivos):"
+                      unzip -l "$zip_file" | head -35
+                      echo ""
+                      echo "Verificando se SkillBridge.API.dll está na raiz do ZIP:"
+                      if unzip -l "$zip_file" | grep -q "^[[:space:]]*[0-9].*SkillBridge.API.dll$"; then
+                        echo "OK: SkillBridge.API.dll encontrado na raiz do ZIP"
                       else
+                        echo "AVISO: SkillBridge.API.dll pode estar em subpasta"
+                        unzip -l "$zip_file" | grep "SkillBridge.API.dll" || echo "DLL não encontrado no ZIP"
+                      fi
+                      
+                      # Usar o ZIP encontrado diretamente
+                      echo "ZIP pronto para deploy: $zip_file"
+
+                # Deploy para Azure App Service usando ZIP Deploy API
+                - task: AzureCLI@2
+                  displayName: 'Deploy ZIP para App Service'
+                  inputs:
+                    azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      zip_file=$(find $(Pipeline.Workspace)/drop -name "*.zip" -type f | head -1)
+                      if [ -z "$zip_file" ]; then
                         echo "Erro: ZIP não encontrado"
                         exit 1
                       fi
-
-                # Deploy para Azure App Service
-                - task: AzureWebApp@1
-                  displayName: 'Deploy para Azure App Service'
-                  inputs:
-                    azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
-                    appName: '$(WEB_APP_NAME)'
-                    package: '$(Pipeline.Workspace)/drop/deploy.zip'
-                    deploymentMethod: 'auto'
+                      
+                      echo "Fazendo deploy do ZIP: $zip_file"
+                      echo "App Service: $(WEB_APP_NAME)"
+                      echo "Resource Group: $(RESOURCE_GROUP_NAME)"
+                      
+                      # Usar ZIP Deploy via Kudu API
+                      DEPLOY_URL="https://$(WEB_APP_NAME).scm.azurewebsites.net/api/zipdeploy"
+                      
+                      # Obter credenciais de publicação
+                      PUBLISH_PROFILE=$(az webapp deployment list-publishing-profiles \
+                        --name $(WEB_APP_NAME) \
+                        --resource-group $(RESOURCE_GROUP_NAME) \
+                        --xml)
+                      
+                      USERNAME=$(echo "$PUBLISH_PROFILE" | grep -oP '(?<=userName=")[^"]*' | head -1)
+                      PASSWORD=$(echo "$PUBLISH_PROFILE" | grep -oP '(?<=userPWD=")[^"]*' | head -1)
+                      
+                      if [ -z "$USERNAME" ] || [ -z "$PASSWORD" ]; then
+                        echo "Erro: Não foi possível obter credenciais de publicação"
+                        exit 1
+                      fi
+                      
+                      echo "Fazendo upload do ZIP..."
+                      response=$(curl -s -w "\n%{http_code}" -X POST \
+                        -u "$USERNAME:$PASSWORD" \
+                        --data-binary @"$zip_file" \
+                        -H "Content-Type: application/zip" \
+                        "$DEPLOY_URL")
+                      
+                      http_code=$(echo "$response" | tail -1)
+                      body=$(echo "$response" | sed '$d')
+                      
+                      echo "Status HTTP: $http_code"
+                      if [ "$http_code" -eq 200 ] || [ "$http_code" -eq 201 ]; then
+                        echo "Deploy realizado com sucesso!"
+                      else
+                        echo "Erro no deploy. Resposta:"
+                        echo "$body"
+                        exit 1
+                      fi
 
                 # Health check com retry
                 - task: Bash@3
