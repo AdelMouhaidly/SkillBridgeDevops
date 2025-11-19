@@ -108,6 +108,14 @@ stages:
               codeCoverageTool: "Cobertura"
               summaryFileLocation: "$(Agent.TempDirectory)/**/coverage.cobertura.xml"
 
+          # Restaurar novamente com runtime específico para publish
+          - task: DotNetCoreCLI@2
+            displayName: "Restaurar com runtime linux-x64"
+            inputs:
+              command: "restore"
+              projects: "$(projectPath)"
+              arguments: "--runtime linux-x64"
+
           # Publicar artefato com runtime específico
           - task: DotNetCoreCLI@2
             displayName: "Publicar artefato para deploy"
