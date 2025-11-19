@@ -8,7 +8,7 @@ A aplicação está hospedada em nuvem utilizando Azure App Service (PaaS) e Azu
 
 ## Vídeo Demonstrativo
 
- [Assista ao vídeo demonstrativo no YouTube](https://youtu.be/yuugGUVVMnQ?si=f9VZ5kkYSMa5TN5W)
+[Assista ao vídeo demonstrativo no YouTube](https://youtu.be/yuugGUVVMnQ?si=f9VZ5kkYSMa5TN5W)
 
 ## Arquitetura
 
