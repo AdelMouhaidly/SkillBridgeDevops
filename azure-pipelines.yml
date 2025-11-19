@@ -178,8 +178,8 @@ stages:
                     script: |
                       set -e
                       
-                      # Instalar EF Core Tools (força reinstalação se já existir)
-                      dotnet tool install --global dotnet-ef --version 8.0.0 || dotnet tool update --global dotnet-ef --version 8.0.0
+                      # Instalar/Atualizar EF Core Tools para versão mais recente
+                      dotnet tool install --global dotnet-ef --version 8.0.6 || dotnet tool update --global dotnet-ef --version 8.0.6
                       
                       # Adicionar ao PATH
                       export PATH="$PATH:/home/vsts/.dotnet/tools"
@@ -188,15 +188,28 @@ stages:
                       echo "Verificando versão do dotnet-ef:"
                       dotnet ef --version
                       
-                      # Executar migrations
-                      echo "Executando migrations..."
-                      dotnet ef database update \
+                      # Testar conexão primeiro
+                      echo "Testando conexão com o banco de dados..."
+                      echo "Host: $(DB_SERVER)"
+                      echo "Database: $(DB_NAME)"
+                      
+                      # Executar migrations com timeout de 5 minutos
+                      echo "Executando migrations (timeout: 5 minutos)..."
+                      timeout 300 dotnet ef database update \
                         --project $(projectPath) \
                         --connection "$(DB_CONNECTION_STRING)" \
                         --no-build \
-                        --verbose
+                        --verbose 2>&1 || {
+                        EXIT_CODE=$?
+                        if [ $EXIT_CODE -eq 124 ]; then
+                          echo "❌ Timeout ao executar migrations (5 minutos)"
+                        else
+                          echo "❌ Erro ao executar migrations (código: $EXIT_CODE)"
+                        fi
+                        exit $EXIT_CODE
+                      }
                       
-                      echo "Migrations executadas com sucesso!"
+                      echo "✅ Migrations executadas com sucesso!"
                   env:
                     ConnectionStrings__DefaultConnection: '$(DB_CONNECTION_STRING)'
 

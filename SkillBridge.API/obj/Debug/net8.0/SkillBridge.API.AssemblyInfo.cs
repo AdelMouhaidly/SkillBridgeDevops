@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("SkillBridge.API")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+5e5c67b2ca666d2c6b993ab45106eba5344898a1")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+4bfaefac8338abef01e83df9c2431bf007d7f96a")]
 [assembly: System.Reflection.AssemblyProductAttribute("SkillBridge.API")]
 [assembly: System.Reflection.AssemblyTitleAttribute("SkillBridge.API")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
